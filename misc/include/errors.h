@@ -5,6 +5,9 @@ typedef enum {
     TOO_FEW,
     TOO_MANY,
     INV_ARG,
+    PIPE_FAIL,
+    POOL_FAIL,
+    SIG_FAIL,
     TIMEDOUT
 } ErrType;
 

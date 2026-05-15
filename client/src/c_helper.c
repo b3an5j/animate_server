@@ -1,12 +1,13 @@
 #define _POSIX_C_SOURCE 200809L
 
-#include "c_helper.h"
-#include "errors.h"
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+#include "c_helper.h"
+#include "errors.h"
 
 volatile sig_atomic_t CONNECTION_STATE = IDLE;
 
@@ -14,11 +15,13 @@ int set_serverpid(int argc, char *argv[])
 {
     if (argc == 1) {
         fprintf(stderr, "%s%s", errs[TOO_FEW], c_usage);
+        fflush(stderr);
         retval = TOO_FEW;
         return 1;
     }
     if (argc > 2) {
         fprintf(stderr, "%s%s", errs[TOO_MANY], c_usage);
+        fflush(stderr);
         retval = TOO_MANY;
         return 1;
     }
@@ -26,6 +29,7 @@ int set_serverpid(int argc, char *argv[])
     SERVER_PID = atoi(argv[1]);
     if (SERVER_PID <= 0) {
         fprintf(stderr, "%s%s", errs[INV_ARG], c_usage);
+        fflush(stderr);
         retval = INV_ARG;
         return 1;
     }
@@ -46,7 +50,7 @@ static void alarm_handler(int signum)
     TIMED_OUT = 1;
 }
 
-int setup_signals()
+int client_setup_signals()
 {
     struct sigaction sa = {0};
     sigemptyset(&sa.sa_mask);
@@ -54,14 +58,16 @@ int setup_signals()
     /* SIGUSR2 */
     sa.sa_handler = sigusr2_handler;
     if (sigaction(SIGUSR2, &sa, NULL) == -1) {
-        perror("Signal setup fail");
+        fprintf(stderr, errs[SIG_FAIL]);
+        fflush(stderr);
         return 1;
     }
 
     /* ALARM */
     sa.sa_handler = alarm_handler;
     if (sigaction(SIGALRM, &sa, NULL) == -1) {
-        perror("Signal setup fail");
+        fprintf(stderr, errs[SIG_FAIL]);
+        fflush(stderr);
         return 1;
     }
     return 0;
@@ -100,10 +106,12 @@ int perform_handshake()
 
     if (TIMED_OUT) {
         fprintf(stderr, "%s", errs[TIMEDOUT]);
+        fflush(stderr);
         retval = TIMEDOUT;
         return 1;
     }
 
     printf("Connected to %d.\n", SERVER_PID);
+    fflush(stdout);
     return 0;
 }

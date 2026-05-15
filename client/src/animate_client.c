@@ -1,7 +1,8 @@
-#include "c_helper.h"
 #include <stdio.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+#include "c_helper.h"
 
 pid_t SERVER_PID;
 

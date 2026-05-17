@@ -39,7 +39,7 @@ int creg_insert(pid_t client_pid, int c2s_fd, int s2c_fd)
     cr_count++;
 
     pthread_mutex_unlock(&cr_lock);
-    return 0;
+    return SUCCESS;
 }
 
 void creg_remove(pid_t client_pid)

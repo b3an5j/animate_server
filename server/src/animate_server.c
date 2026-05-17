@@ -31,16 +31,17 @@ int main(int argc, char **argv, char **envp)
     sigaddset(&mask, SIGQUIT);
     sigprocmask(SIG_BLOCK, &mask, &oldmask);
 
-    if (get_threadpool_size(argc, argv) != 0) {
+    if (get_threadpool_size(argc, argv) != SUCCESS) {
         return retval;
     }
-    if (server_setup_pipes() != 0 || server_setup_signals() != 0) {
+    if (server_setup_pipes() != SUCCESS || server_setup_signals() != SUCCESS) {
         server_destroy_pipes();
         return retval;
     }
-    if (threadpool_init() != 0) {
+    if (threadpool_init() != SUCCESS) {
         return retval;
     }
+    creg_init();
     task_init();
 
     pid_t SERVER_PID = getpid();
@@ -65,6 +66,8 @@ int main(int argc, char **argv, char **envp)
         if (HSK_POLLFD.revents & POLLIN) {
             pid_t   client_pid;
             ssize_t n_read;
+
+            // exhaust the pipe
             while ((n_read = read(HSK_R, &client_pid, sizeof(pid_t))) ==
                    sizeof(pid_t)) {
                 task_enqueue(HANDSHAKE, client_pid, 0, 0);
@@ -93,8 +96,75 @@ int main(int argc, char **argv, char **envp)
 
         /* Handle RPC inter thread communication */
         if (RPC_POLLFD.revents & POLLIN) {
-            // take the fds opened for client
+            TaskResult taskresult;
+            size_t     n_read;
+
+            // sanity check
+            if ((n_read = read(RPC_R, &taskresult, sizeof(TaskResult))) !=
+                sizeof(TaskResult)) {
+                if (n_read == 0) {
+                    fprintf(stderr, errs[PIPE_CLOSED], "Inter thread");
+                    fflush(stderr);
+                    RUNNING = 0;
+                    break;
+                }
+                else if (n_read > 0 && n_read < sizeof(TaskResult)) {
+                    fprintf(stderr, errs[PIPE_PARTIAL], "Inter thread");
+                    fflush(stderr);
+                    RUNNING = 0;
+                    break;
+                }
+                else if (n_read < 0) {
+                    fprintf(stderr, errs[PIPE_READ_FAIL], "Inter thread");
+                    fflush(stderr);
+                    RUNNING = 0;
+                    break;
+                }
+            }
+
+            switch (taskresult.type) {
+            case HANDSHAKE:
+                pid_t client = taskresult.client_pid;
+                int   c2s_fd = taskresult.result_c2s_fd;
+                int   s2c_fd = taskresult.result_s2c_fd;
+
+                if (creg_insert(client, c2s_fd, s2c_fd) != SUCCESS) {
+                    // drop straight away
+                    close(taskresult.result_c2s_fd);
+                    close(taskresult.result_s2c_fd);
+
+                    char temp[FIFO_MAX_NAME];
+                    set_name(temp, C2S, client);
+                    unlink(temp);
+                    set_name(temp, S2C, client);
+                    unlink(temp);
+                    goto skip_ithread;
+                }
+
+                if (server_insert_pollfd(c2s_fd) != SUCCESS) {
+                    // drop straight away
+                    creg_remove(client);
+
+                    close(taskresult.result_c2s_fd);
+                    close(taskresult.result_s2c_fd);
+
+                    char temp[FIFO_MAX_NAME];
+                    set_name(temp, C2S, client);
+                    unlink(temp);
+                    set_name(temp, S2C, client);
+                    unlink(temp);
+                    goto skip_ithread;
+                }
+                break;
+
+            case RPC:
+                break;
+
+            default:
+                break;
+            }
         }
+    skip_ithread:
 
         /* Handle client RPC requests */
     }

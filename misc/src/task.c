@@ -1,8 +1,9 @@
-#include "task.h"
-#include "errors.h"
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+#include "errors.h"
+#include "task.h"
 
 static TaskQueue TASK_Q;
 
@@ -13,7 +14,6 @@ void task_init()
     tq_count = 0;
     pthread_mutex_init(&tq_lock, NULL);
     pthread_cond_init(&tq_not_empty, NULL);
-    return 0;
 }
 
 int task_enqueue(TaskType type, //
@@ -26,7 +26,7 @@ int task_enqueue(TaskType type, //
         fprintf(stderr, errs[TQ_FAIL]);
         fflush(stderr);
         retval = TQ_FAIL;
-        return 1;
+        return TQ_FAIL;
     }
 
     newtask->type = type;
@@ -66,7 +66,7 @@ int task_enqueue(TaskType type, //
     pthread_cond_signal(&tq_not_empty);
 
     pthread_mutex_unlock(&tq_lock);
-    return 0;
+    return SUCCESS;
 }
 
 Task *task_dequeue()

@@ -7,6 +7,7 @@
 
 extern volatile sig_atomic_t RUNNING;
 
+/* Task */
 typedef enum {
     HANDSHAKE,
     RPC,
@@ -27,7 +28,6 @@ typedef struct Task {
         } rpc;
     } info;
     struct Task *next;
-    ErrType      retval;
 } Task;
 
 // Task aliases
@@ -37,6 +37,20 @@ typedef struct Task {
 #define task_c2s_fd info.rpc.c2s_fd
 #define task_s2c_fd info.rpc.s2c_fd
 
+/* Task result */
+typedef struct {
+    TaskType type;
+    pid_t    client_pid;
+    union {
+        int fds[2];
+    } result;
+} TaskResult;
+
+// Task result aliases
+#define result_c2s_fd result.fds[0]
+#define result_s2c_fd result.fds[1]
+
+/* Task queue */
 typedef struct {
     Task           *head;
     Task           *tail;

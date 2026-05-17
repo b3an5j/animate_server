@@ -2,19 +2,20 @@
 #define ERRORS_H
 
 typedef enum {
+    SUCCESS,
     TOO_FEW,
     TOO_MANY,
-    INV_ARG,
-    PIPE_FAIL,
+    TIMEDOUT,
     POOL_FAIL,
+    INV_ARG,
     SIG_FAIL,
     TQ_FAIL,
-    POLLFD_FAIL,
     CR_FAIL,
-    TIMEDOUT,
+    PIPE_FAIL,
     PIPE_READ_FAIL,
     PIPE_CLOSED,
     PIPE_PARTIAL,
+    POLLFD_FAIL,
     GROW_FAIL
 } ErrType;
 

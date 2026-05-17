@@ -2,6 +2,7 @@
 #define S_HELPER_H
 
 #include "errors.h"
+#include <poll.h>
 #include <sys/types.h>
 
 #define POLLFD_INIT_N 32
@@ -31,7 +32,11 @@ extern volatile PollFds POLLFDS;
 
 int  server_setup_pipes();
 void server_destroy_pipes();
+
 int  server_grow_pollfd();
-int  server_setup_signals();
+int  server_insert_pollfd(int fd);
+void server_remove_pollfd(int fd);
+
+int server_setup_signals();
 
 #endif /* S_HELPER_H */

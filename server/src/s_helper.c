@@ -21,10 +21,10 @@ static volatile PollFds POLLFDS;
 int server_setup_pipes()
 {
     if (pipe2(HANDSHAKE_PIPE, O_NONBLOCK) != 0 || pipe2(RPC_PIPE, 0) != 0) {
-        fprintf(stderr, errs[PIPE_FAIL]);
+        fprintf(stderr, errs[PIPE_FAIL], 0);
         fflush(stderr);
         retval = PIPE_FAIL;
-        return 1;
+        return PIPE_FAIL;
     }
 
     S_POLL_FDS = malloc(sizeof(*S_POLL_FDS) * POLLFD_INIT_N);
@@ -32,7 +32,7 @@ int server_setup_pipes()
         fprintf(stderr, errs[POLLFD_FAIL]);
         fflush(stderr);
         retval = POLLFD_FAIL;
-        return 1;
+        return POLLFD_FAIL;
     }
     S_POLL_FD_CAPACITY = POLLFD_INIT_N;
 
@@ -45,24 +45,7 @@ int server_setup_pipes()
     RPC_POLLFD.revents = 0;
 
     S_POLL_FD_COUNT = 2;
-    return 0;
-}
-
-int server_grow_pollfd()
-{
-    size_t new_capacity = S_POLL_FD_CAPACITY * 2;
-
-    struct pollfd *temp =
-        reallocarray(S_POLL_FDS, new_capacity, sizeof(*S_POLL_FDS));
-    if (temp == NULL) {
-        fprintf(stderr, errs[GROW_FAIL]);
-        fflush(stderr);
-        return 1;
-    }
-
-    S_POLL_FDS         = temp;
-    S_POLL_FD_CAPACITY = new_capacity;
-    return 0;
+    return SUCCESS;
 }
 
 void server_destroy_pipes()
@@ -77,6 +60,57 @@ void server_destroy_pipes()
     free(S_POLL_FDS);
 }
 
+int server_grow_pollfd()
+{
+    size_t new_capacity = S_POLL_FD_CAPACITY * 2;
+
+    struct pollfd *temp =
+        reallocarray(S_POLL_FDS, new_capacity, sizeof(*S_POLL_FDS));
+    if (temp == NULL) {
+        fprintf(stderr, errs[GROW_FAIL]);
+        fflush(stderr);
+        return GROW_FAIL;
+    }
+
+    S_POLL_FDS         = temp;
+    S_POLL_FD_CAPACITY = new_capacity;
+    return SUCCESS;
+}
+
+int server_insert_pollfd(int fd)
+{
+    // Check if grow needed
+    if (S_POLL_FD_CAPACITY == S_POLL_FD_COUNT) {
+        if (server_grow_pollfd() != SUCCESS) {
+            return GROW_FAIL;
+        }
+    }
+
+    struct pollfd *cell = &S_POLL_FDS[S_POLL_FD_COUNT];
+    cell->fd            = fd;
+    cell->events        = POLLIN;
+    cell->revents       = 0;
+    S_POLL_FD_COUNT++;
+    return SUCCESS;
+}
+
+void server_remove_pollfd(int fd)
+{
+    if (!S_POLL_FDS || S_POLL_FD_COUNT == 0)
+        return;
+
+    // look for fd, better parallel
+    for (size_t i = 0; i < S_POLL_FD_COUNT; ++i) {
+        if (S_POLL_FDS[i].fd != fd)
+            continue;
+
+        // insert last to empty cell
+        S_POLL_FDS[i] = S_POLL_FDS[S_POLL_FD_COUNT - 1];
+        S_POLL_FD_COUNT--;
+        return;
+    }
+}
+
 // signal handlers
 static void sigusr1_handler(int signum, siginfo_t *info, void *context)
 {
@@ -84,7 +118,7 @@ static void sigusr1_handler(int signum, siginfo_t *info, void *context)
     (void)context;
 
     pid_t client_pid = info.si_pid;
-    write(HSK_W, &client_pid, sizeof(client_pid));
+    write(HSK_W, &client_pid, sizeof(pid_t));
 }
 
 static void shutdown_handler(int signum)
@@ -100,12 +134,12 @@ int server_setup_signals()
     sigemptyset(&sa.sa_mask);
 
     /* SIGUSR1 */
-    sa.sa_flags   = SA_SIGINFO;
-    sa.sa_handler = sigusr1_handler;
+    sa.sa_flags     = SA_SIGINFO;
+    sa.sa_sigaction = sigusr1_handler;
     if (sigaction(SIGUSR1, &sa, NULL) == -1) {
         fprintf(stderr, errs[SIG_FAIL]);
         fflush(stderr);
-        return 1;
+        return SIG_FAIL;
     }
 
     /* SIGINT */
@@ -114,7 +148,7 @@ int server_setup_signals()
     if (sigaction(SIGINT, &sa, NULL) == -1) {
         fprintf(stderr, errs[SIG_FAIL]);
         fflush(stderr);
-        return 1;
+        return SIG_FAIL;
     }
 
     /* SIGTERM */
@@ -123,7 +157,7 @@ int server_setup_signals()
     if (sigaction(SIGTERM, &sa, NULL) == -1) {
         fprintf(stderr, errs[SIG_FAIL]);
         fflush(stderr);
-        return 1;
+        return SIG_FAIL;
     }
 
     /* SIGQUIT */
@@ -132,7 +166,7 @@ int server_setup_signals()
     if (sigaction(SIGQUIT, &sa, NULL) == -1) {
         fprintf(stderr, errs[SIG_FAIL]);
         fflush(stderr);
-        return 1;
+        return SIG_FAIL;
     }
 
     /* SIGHUP */
@@ -141,8 +175,8 @@ int server_setup_signals()
     if (sigaction(SIGHUP, &sa, NULL) == -1) {
         fprintf(stderr, errs[SIG_FAIL]);
         fflush(stderr);
-        return 1;
+        return SIG_FAIL;
     }
 
-    return 0;
+    return SUCCESS;
 }

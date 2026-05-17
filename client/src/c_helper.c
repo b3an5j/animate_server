@@ -17,13 +17,13 @@ int set_serverpid(int argc, char *argv[])
         fprintf(stderr, "%s%s", errs[TOO_FEW], c_usage);
         fflush(stderr);
         retval = TOO_FEW;
-        return 1;
+        return TOO_FEW;
     }
     if (argc > 2) {
         fprintf(stderr, "%s%s", errs[TOO_MANY], c_usage);
         fflush(stderr);
         retval = TOO_MANY;
-        return 1;
+        return TOO_MANY;
     }
 
     SERVER_PID = atoi(argv[1]);
@@ -31,9 +31,9 @@ int set_serverpid(int argc, char *argv[])
         fprintf(stderr, "%s%s", errs[INV_ARG], c_usage);
         fflush(stderr);
         retval = INV_ARG;
-        return 1;
+        return INV_ARG;
     }
-    return 0;
+    return SUCCESS;
 }
 
 static void sigusr2_handler(int signum)
@@ -60,7 +60,7 @@ int client_setup_signals()
     if (sigaction(SIGUSR2, &sa, NULL) == -1) {
         fprintf(stderr, errs[SIG_FAIL]);
         fflush(stderr);
-        return 1;
+        return SIG_FAIL;
     }
 
     /* ALARM */
@@ -68,9 +68,9 @@ int client_setup_signals()
     if (sigaction(SIGALRM, &sa, NULL) == -1) {
         fprintf(stderr, errs[SIG_FAIL]);
         fflush(stderr);
-        return 1;
+        return SIG_FAIL;
     }
-    return 0;
+    return SUCCESS;
 }
 
 int perform_handshake()
@@ -91,7 +91,7 @@ int perform_handshake()
         perror("Failed to signal server");
         alarm(0);
         sigprocmask(SIG_SETMASK, &oldmask, NULL);
-        return 1;
+        return SIG_FAIL;
     }
 
     // use the original where SIGUSR2 is allowed, wait
@@ -108,10 +108,10 @@ int perform_handshake()
         fprintf(stderr, "%s", errs[TIMEDOUT]);
         fflush(stderr);
         retval = TIMEDOUT;
-        return 1;
+        return TIMED_OUT;
     }
 
     printf("Connected to %d.\n", SERVER_PID);
     fflush(stdout);
-    return 0;
+    return SUCCESS;
 }

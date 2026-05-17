@@ -9,7 +9,7 @@
 #include "c_helper.h"
 #include "errors.h"
 
-volatile sig_atomic_t CONNECTION_STATE = IDLE;
+static volatile sig_atomic_t CONNECTION_STATE = IDLE;
 
 int set_serverpid(int argc, char *argv[])
 {

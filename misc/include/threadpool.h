@@ -1,8 +1,7 @@
 #ifndef THREADPOOL_H
 #define THREADPOOL_H
 
-#include <pthread.h>
-#include <signal.h>
+#include <sys/types.h>
 
 extern volatile sig_atomic_t RUNNING;
 

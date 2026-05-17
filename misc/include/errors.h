@@ -8,7 +8,14 @@ typedef enum {
     PIPE_FAIL,
     POOL_FAIL,
     SIG_FAIL,
-    TIMEDOUT
+    TQ_FAIL,
+    POLLFD_FAIL,
+    CR_FAIL,
+    TIMEDOUT,
+    PIPE_READ_FAIL,
+    PIPE_CLOSED,
+    PIPE_PARTIAL,
+    GROW_FAIL
 } ErrType;
 
 extern ErrType retval;

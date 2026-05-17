@@ -71,6 +71,10 @@ void threadpool_destroy()
     if (RUNNING)
         return;
 
+    pthread_mutex_lock(&tq_lock);
+    pthread_cond_broadcast(&tq_not_empty);
+    pthread_mutex_unlock(&tq_lock);
+
     for (size_t i = 0; i < TPOOL_SIZE; ++i) {
         pthread_join(tpool_threads[i], NULL);
     }

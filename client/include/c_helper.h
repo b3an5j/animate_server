@@ -2,6 +2,7 @@
 #define C_HELPER_H
 
 #include "errors.h"
+#include <sys/types.h>
 
 extern pid_t                 SERVER_PID;
 extern volatile sig_atomic_t CONNECTION_STATE;

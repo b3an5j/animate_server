@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 
+#include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
 #include <signal.h>
@@ -7,13 +8,14 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "s_helper.h"
 #include "task.h"
 #include "threadpool.h"
 
-static ThreadPool THREADPOOL;
+ThreadPool THREADPOOL;
 
 int get_threadpool_size(int argc, char **argv)
 {
@@ -60,42 +62,50 @@ static void *worker_routine(void *)
             mode_t old_umask = umask(0);
             if (mkfifo(task->task_c2s_name, 0666) != 0 ||
                 mkfifo(task->task_s2c_name, 0666) != 0) {
-                fprintf(stderr, errs[PIPE_FAIL], task->task_client_pid);
-                // ignore and drop the handshake
-                free(task);
-                continue;
+                goto hsk_fail;
             }
             umask(old_umask);
 
             // signal client
-            kill(task->task_client_pid, SIGUSR2);
-
-            // open fifo
-            int temp;
-            temp = open(task->task_c2s_name, O_NONBLOCK | O_RDONLY);
-            if (temp == -1) {
-                unlink(task->task_c2s_name);
-                unlink(task->task_s2c_name);
-
-                fprintf(stderr, errs[PIPE_FAIL], task->task_client_pid);
-                // ignore and drop the handshake
-                free(task);
-                continue;
+            if (kill(task->task_client_pid, SIGUSR2) == -1) {
+                goto hsk_fail;
             }
-            taskresult.result_c2s_fd = temp;
 
-            temp = open(task->task_s2c_name, O_RDWR); // simulate nonblock
-            if (temp == -1) {
-                unlink(task->task_c2s_name);
-                unlink(task->task_s2c_name);
-
-                fprintf(stderr, errs[PIPE_FAIL], task->task_client_pid);
-                // ignore and drop the handshake
-                free(task);
-                continue;
+            // open read fifo
+            int r_temp = open(task->task_c2s_name, O_NONBLOCK | O_RDONLY);
+            if (r_temp == -1) {
+                goto hsk_fail;
             }
-            taskresult.result_s2c_fd = temp;
+            taskresult.result_c2s_fd = r_temp;
+
+            // open write fifo
+            int w_temp = open(task->task_s2c_name, O_NONBLOCK | O_WRONLY);
+            if (w_temp == -1) {
+                if (errno == ENXIO) { // give chance
+                    struct timespec t_temp = {0};
+                    t_temp.tv_nsec         = 1000000;
+                    nanosleep(&t_temp, NULL);
+
+                    w_temp = open(task->task_s2c_name, O_NONBLOCK | O_WRONLY);
+                }
+
+                if (w_temp == -1) {
+                    close(taskresult.result_c2s_fd);
+                    goto hsk_fail;
+                }
+            }
+            taskresult.result_s2c_fd = w_temp;
             break;
+
+        hsk_fail:
+            unlink(task->task_c2s_name);
+            unlink(task->task_s2c_name);
+
+            fprintf(stderr, errs[PIPE_FAIL], task->task_client_pid);
+            fflush(stderr);
+            // ignore and drop the handshake
+            free(task);
+            continue;
 
         case RPC:
             break;

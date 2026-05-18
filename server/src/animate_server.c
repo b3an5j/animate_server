@@ -17,32 +17,37 @@
 #include "task.h"
 #include "threadpool.h"
 
-static volatile sig_atomic_t RUNNING = 0;
+volatile sig_atomic_t RUNNING = 0;
 
 int main(int argc, char **argv, char **envp)
 {
+    (void)envp;
+
     /* Start procedure */
     // block, no interruption
     sigset_t mask, oldmask;
-    sigemptyset(&mask);
-    sigaddset(&mask, SIGUSR1);
-    sigaddset(&mask, SIGINT);
-    sigaddset(&mask, SIGTERM);
-    sigaddset(&mask, SIGQUIT);
+    sigfillset(&mask);
     sigprocmask(SIG_BLOCK, &mask, &oldmask);
 
     if (get_threadpool_size(argc, argv) != SUCCESS) {
-        return retval;
+        RUNNING = 0;
+        sigprocmask(SIG_SETMASK, &oldmask, NULL);
+        goto teardown;
     }
-    if (server_setup_pipes() != SUCCESS || server_setup_signals() != SUCCESS) {
-        server_destroy_pipes();
-        return retval;
-    }
-    if (threadpool_init() != SUCCESS) {
-        return retval;
-    }
+
     creg_init();
     task_init();
+
+    if (server_setup_pipes() != SUCCESS || server_setup_signals() != SUCCESS) {
+        RUNNING = 0;
+        sigprocmask(SIG_SETMASK, &oldmask, NULL);
+        goto teardown;
+    }
+    if (threadpool_init() != SUCCESS) { // signal deaf threads
+        RUNNING = 0;
+        sigprocmask(SIG_SETMASK, &oldmask, NULL);
+        goto teardown;
+    }
 
     pid_t SERVER_PID = getpid();
     printf("Server PID: %d\n", SERVER_PID);
@@ -169,10 +174,11 @@ int main(int argc, char **argv, char **envp)
         /* Handle client RPC requests */
     }
 
+teardown:
     /* Teardown */
     threadpool_destroy();
     creg_destroy();
     server_destroy_pipes();
     task_destroy();
-    return 0;
+    return retval ? retval : 0;
 }

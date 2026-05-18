@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 
+#include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,8 +9,10 @@
 
 #include "c_helper.h"
 #include "errors.h"
+#include "fifo.h"
 
-static volatile sig_atomic_t CONNECTION_STATE = IDLE;
+volatile sig_atomic_t CONNECTION_STATE = IDLE;
+int                   C_FDS[2];
 
 int set_serverpid(int argc, char *argv[])
 {
@@ -42,12 +45,16 @@ static void sigusr2_handler(int signum)
     CONNECTION_STATE = CONNECTED;
 }
 
-volatile sig_atomic_t TIMED_OUT = 0;
-
 static void alarm_handler(int signum)
 {
     (void)signum;
-    TIMED_OUT = 1;
+    CONNECTION_STATE = TIMED_OUT;
+}
+
+static void shutdown_handler(int signum)
+{
+    (void)signum;
+    CONNECTION_STATE = DISCONNECTED;
 }
 
 int client_setup_signals()
@@ -70,32 +77,83 @@ int client_setup_signals()
         fflush(stderr);
         return SIG_FAIL;
     }
+
+    /* SIGINT */
+    sa.sa_flags   = 0;
+    sa.sa_handler = shutdown_handler;
+    if (sigaction(SIGINT, &sa, NULL) == -1) {
+        fprintf(stderr, errs[SIG_FAIL]);
+        fflush(stderr);
+        return SIG_FAIL;
+    }
+
+    /* SIGTERM */
+    sa.sa_flags   = 0;
+    sa.sa_handler = shutdown_handler;
+    if (sigaction(SIGTERM, &sa, NULL) == -1) {
+        fprintf(stderr, errs[SIG_FAIL]);
+        fflush(stderr);
+        return SIG_FAIL;
+    }
+
+    /* SIGQUIT */
+    sa.sa_flags   = 0;
+    sa.sa_handler = shutdown_handler;
+    if (sigaction(SIGQUIT, &sa, NULL) == -1) {
+        fprintf(stderr, errs[SIG_FAIL]);
+        fflush(stderr);
+        return SIG_FAIL;
+    }
+
+    /* SIGHUP */
+    sa.sa_flags   = 0;
+    sa.sa_handler = shutdown_handler;
+    if (sigaction(SIGHUP, &sa, NULL) == -1) {
+        fprintf(stderr, errs[SIG_FAIL]);
+        fflush(stderr);
+        return SIG_FAIL;
+    }
+
     return SUCCESS;
 }
 
+static void reset_alarm_handler()
+{
+    struct sigaction sa = {0};
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags   = 0;
+    sa.sa_handler = SIG_DFL;
+
+    if (sigaction(SIGALRM, &sa, NULL) == -1) {
+        perror("Failed to reset alarm handler");
+        fflush(stderr);
+    }
+}
+
+void perform_goodbye();
+
 int perform_handshake()
 {
-    /* prevent race condition */
-    // block the SIGUSR2 input temporarily
+    // block, no interruption
     sigset_t mask, oldmask;
-    sigemptyset(&mask);
-    sigaddset(&mask, SIGUSR2);
-    sigaddset(&mask, SIGALRM);
+    sigfillset(&mask);
     sigprocmask(SIG_BLOCK, &mask, &oldmask);
 
-    TIMED_OUT        = 0;
     CONNECTION_STATE = SYN_SENT;
     alarm(1);
 
+    // send syn
     if (kill(SERVER_PID, SIGUSR1) == -1) {
         perror("Failed to signal server");
+        fflush(stderr);
+
         alarm(0);
         sigprocmask(SIG_SETMASK, &oldmask, NULL);
         return SIG_FAIL;
     }
 
-    // use the original where SIGUSR2 is allowed, wait
-    while (!TIMED_OUT && CONNECTION_STATE != CONNECTED) {
+    // receive signals
+    while (CONNECTION_STATE == SYN_SENT) {
         // can be woken up by any signal
         sigsuspend(&oldmask);
     }
@@ -104,13 +162,46 @@ int perform_handshake()
     alarm(0);
     sigprocmask(SIG_SETMASK, &oldmask, NULL);
 
-    if (TIMED_OUT) {
+    if (CONNECTION_STATE == TIMED_OUT) {
         fprintf(stderr, "%s", errs[TIMEDOUT]);
         fflush(stderr);
         retval = TIMEDOUT;
-        return TIMED_OUT;
+        return TIMEDOUT;
     }
 
+    // open the server fifo
+    char name_temp[FIFO_MAX_NAME];
+
+    // read end
+    alarm(1);
+    int r_temp = set_name(name_temp, S2C, getpid());
+    r_temp     = open(name_temp, O_RDONLY);
+    if (r_temp == -1) {
+        CONNECTION_STATE = DISCONNECTED;
+
+        fprintf(stderr, errs[PIPE_FAIL], getpid());
+        fflush(stderr);
+        retval = PIPE_FAIL;
+        return PIPE_FAIL;
+    }
+    S_READ = r_temp;
+
+    // write end
+    set_name(name_temp, C2S, getpid());
+    int w_temp = open(name_temp, O_WRONLY);
+    if (w_temp == -1) {
+        close(S_READ);
+        CONNECTION_STATE = DISCONNECTED;
+
+        fprintf(stderr, errs[PIPE_FAIL], getpid());
+        fflush(stderr);
+        retval = PIPE_FAIL;
+        return PIPE_FAIL;
+    }
+    C_WRITE = w_temp;
+
+    alarm(0);
+    reset_alarm_handler();
     printf("Connected to %d.\n", SERVER_PID);
     fflush(stdout);
     return SUCCESS;

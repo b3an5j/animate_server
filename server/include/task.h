@@ -59,7 +59,7 @@ typedef struct {
     pthread_cond_t  not_empty; // consumer
 } TaskQueue;
 
-extern TaskQueue TASK_Q;
+extern volatile TaskQueue TASK_Q;
 
 // Task queue aliases
 #define tq_head TASK_Q.head

@@ -5,7 +5,7 @@
 #include "errors.h"
 #include "task.h"
 
-static TaskQueue TASK_Q;
+volatile TaskQueue TASK_Q;
 
 void task_init()
 {

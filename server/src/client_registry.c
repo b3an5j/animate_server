@@ -7,7 +7,7 @@
 #include "errors.h"
 #include "fifo.h"
 
-static ClientRegistry CLIENT_REGISTRY;
+volatile ClientRegistry CLIENT_REGISTRY;
 
 void creg_init()
 {
@@ -86,6 +86,9 @@ void creg_remove(pid_t client_pid)
 
 void creg_destroy()
 {
+    if (RUNNING)
+        return;
+
     pthread_mutex_lock(&cr_lock);
 
     ActiveClient *curr = cr_clients;

@@ -10,16 +10,16 @@
 #include <unistd.h>
 
 #include "errors.h"
-#include "pending_client.h"
 #include "s_helper.h"
 
 // pipes
-int HANDSHAKE_PIPE[2]; // connects main loop with signal handler
-int RPC_PIPE[2];       // connects main loop with worker threads
-static volatile PollFds POLLFDS;
+int              HANDSHAKE_PIPE[2]; // connects main loop with signal handler
+int              RPC_PIPE[2];       // connects main loop with worker threads
+volatile PollFds POLLFDS;
 
 int server_setup_pipes()
 {
+    /* Open self pipes */
     if (pipe2(HANDSHAKE_PIPE, O_NONBLOCK) != 0 || pipe2(RPC_PIPE, 0) != 0) {
         fprintf(stderr, errs[PIPE_FAIL], 0);
         fflush(stderr);
@@ -27,6 +27,7 @@ int server_setup_pipes()
         return PIPE_FAIL;
     }
 
+    /* Initialise DArray */
     S_POLL_FDS = malloc(sizeof(*S_POLL_FDS) * POLLFD_INIT_N);
     if (S_POLL_FDS == NULL) {
         fprintf(stderr, errs[POLLFD_FAIL]);
@@ -127,7 +128,6 @@ static void shutdown_handler(int signum)
     RUNNING = 0;
 }
 
-// TODO: add core dump SIGABRT
 int server_setup_signals()
 {
     struct sigaction sa = {0};

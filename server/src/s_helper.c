@@ -20,7 +20,8 @@ volatile PollFds POLLFDS;
 int server_setup_pipes()
 {
     /* Open self pipes */
-    if (pipe2(HANDSHAKE_PIPE, O_NONBLOCK) != 0 || pipe2(RPC_PIPE, 0) != 0) {
+    if (pipe2(HANDSHAKE_PIPE, O_NONBLOCK) != 0 ||
+        pipe2(RPC_PIPE, O_NONBLOCK) != 0) {
         fprintf(stderr, errs[PIPE_FAIL], 0);
         fflush(stderr);
         retval = PIPE_FAIL;

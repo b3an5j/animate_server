@@ -69,109 +69,163 @@ int main(int argc, char **argv, char **envp)
 
         /* Handle Handshake requests */
         if (HSK_POLLFD.revents & POLLIN) {
-            pid_t   client_pid;
-            ssize_t n_read;
 
             // exhaust the pipe
-            while ((n_read = read(HSK_R, &client_pid, sizeof(pid_t))) ==
-                   sizeof(pid_t)) {
-                task_enqueue(HANDSHAKE, client_pid, 0, 0);
-            }
+            unsigned char empty_pipe = 0;
+            while (!empty_pipe) {
+                size_t n_read   = 0;
+                size_t n_target = sizeof(pid_t);
+                pid_t  client_pid;
+                char  *ptr = (char *)&client_pid;
 
-            // sanity check
-            if (n_read == 0) {
-                fprintf(stderr, errs[PIPE_CLOSED], "Handshake");
-                fflush(stderr);
-                RUNNING = 0;
-                break;
-            }
-            else if (n_read > 0 && n_read < sizeof(pid_t)) {
-                fprintf(stderr, errs[PIPE_PARTIAL], "Handshake");
-                fflush(stderr);
-                RUNNING = 0;
-                break;
-            }
-            else if (n_read < 0 && (errno != EAGAIN && errno != EWOULDBLOCK)) {
-                fprintf(stderr, errs[PIPE_READ_FAIL], "Handshake");
-                fflush(stderr);
-                RUNNING = 0;
-                break;
+                while (n_read < n_target) {
+                    ssize_t n = read(HSK_R, ptr + n_read, n_target - n_read);
+                    if (n > 0) {
+                        n_read += (size_t)n;
+                    }
+                    else if (n == 0) {
+                        fprintf(stderr, errs[PIPE_CLOSED], "Handshake");
+                        fflush(stderr);
+                        RUNNING = 0;
+                        goto mainloop_end;
+                    }
+                    else { // errors
+                        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                            // nonblocking, could be empty or broken
+                            if (!n_read) {
+                                empty_pipe = 1;
+                                break;
+                            }
+                            else {
+                                fprintf(
+                                    stderr, errs[PIPE_PARTIAL], "Handshake");
+                                fflush(stderr);
+                                RUNNING = 0;
+                                goto mainloop_end;
+                            }
+                        }
+                        else if (errno == EINTR) {
+                            continue;
+                        }
+                        else {
+                            fprintf(stderr, errs[PIPE_READ_FAIL], "Handshake");
+                            fflush(stderr);
+                            RUNNING = 0;
+                            goto mainloop_end;
+                        }
+                    }
+                }
+
+                if (!empty_pipe && n_read == n_target) {
+                    task_enqueue(HANDSHAKE, client_pid, 0, 0);
+                }
             }
         }
 
         /* Handle RPC inter thread communication */
         if (RPC_POLLFD.revents & POLLIN) {
-            TaskResult taskresult;
-            size_t     n_read;
 
-            // sanity check
-            if ((n_read = read(RPC_R, &taskresult, sizeof(TaskResult))) !=
-                sizeof(TaskResult)) {
-                if (n_read == 0) {
-                    fprintf(stderr, errs[PIPE_CLOSED], "Inter thread");
-                    fflush(stderr);
-                    RUNNING = 0;
+            // exhaust the pipe
+            unsigned char empty_pipe = 0;
+            while (!empty_pipe) {
+                size_t     n_read   = 0;
+                size_t     n_target = sizeof(TaskResult);
+                TaskResult taskresult;
+                char      *ptr = (char *)&taskresult;
+
+                while (n_read < n_target) {
+                    ssize_t n = read(RPC_R, ptr + n_read, n_target - n_read);
+                    if (n > 0) {
+                        n_read += (size_t)n;
+                    }
+                    else if (n == 0) {
+                        fprintf(stderr, errs[PIPE_CLOSED], "Inter thread");
+                        fflush(stderr);
+                        RUNNING = 0;
+                        goto mainloop_end;
+                    }
+                    else { // errors
+                        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                            // nonblocking, could be empty or broken
+                            if (!n_read) {
+                                empty_pipe = 1;
+                                break;
+                            }
+                            else {
+                                fprintf(
+                                    stderr, errs[PIPE_PARTIAL], "Inter thread");
+                                fflush(stderr);
+                                RUNNING = 0;
+                                goto mainloop_end;
+                            }
+                        }
+                        else if (errno == EINTR) {
+                            continue;
+                        }
+                        else {
+                            fprintf(
+                                stderr, errs[PIPE_READ_FAIL], "Inter thread");
+                            fflush(stderr);
+                            RUNNING = 0;
+                            goto mainloop_end;
+                        }
+                    }
+                }
+                if (empty_pipe) {
                     break;
                 }
-                else if (n_read > 0 && n_read < sizeof(TaskResult)) {
-                    fprintf(stderr, errs[PIPE_PARTIAL], "Inter thread");
-                    fflush(stderr);
-                    RUNNING = 0;
+
+                switch (taskresult.type) {
+                case HANDSHAKE:
+                    pid_t client = taskresult.client_pid;
+                    int   c2s_fd = taskresult.result_c2s_fd;
+                    int   s2c_fd = taskresult.result_s2c_fd;
+
+                    if (creg_insert(client, c2s_fd, s2c_fd) != SUCCESS) {
+                        // drop straight away
+                        close(taskresult.result_c2s_fd);
+                        close(taskresult.result_s2c_fd);
+
+                        char temp[FIFO_MAX_NAME];
+                        set_name(temp, C2S, client);
+                        unlink(temp);
+                        set_name(temp, S2C, client);
+                        unlink(temp);
+                        continue;
+                    }
+
+                    if (server_insert_pollfd(c2s_fd) != SUCCESS) {
+                        // drop straight away
+                        creg_remove(c2s_fd);
+                        continue;
+                    }
+                    break;
+
+                case RPC:
+                    break;
+
+                default:
                     break;
                 }
-                else if (n_read < 0) {
-                    fprintf(stderr, errs[PIPE_READ_FAIL], "Inter thread");
-                    fflush(stderr);
-                    RUNNING = 0;
-                    break;
-                }
-            }
-
-            switch (taskresult.type) {
-            case HANDSHAKE:
-                pid_t client = taskresult.client_pid;
-                int   c2s_fd = taskresult.result_c2s_fd;
-                int   s2c_fd = taskresult.result_s2c_fd;
-
-                if (creg_insert(client, c2s_fd, s2c_fd) != SUCCESS) {
-                    // drop straight away
-                    close(taskresult.result_c2s_fd);
-                    close(taskresult.result_s2c_fd);
-
-                    char temp[FIFO_MAX_NAME];
-                    set_name(temp, C2S, client);
-                    unlink(temp);
-                    set_name(temp, S2C, client);
-                    unlink(temp);
-                    goto skip_ithread;
-                }
-
-                if (server_insert_pollfd(c2s_fd) != SUCCESS) {
-                    // drop straight away
-                    creg_remove(client);
-
-                    close(taskresult.result_c2s_fd);
-                    close(taskresult.result_s2c_fd);
-
-                    char temp[FIFO_MAX_NAME];
-                    set_name(temp, C2S, client);
-                    unlink(temp);
-                    set_name(temp, S2C, client);
-                    unlink(temp);
-                    goto skip_ithread;
-                }
-                break;
-
-            case RPC:
-                break;
-
-            default:
-                break;
             }
         }
-    skip_ithread:
 
         /* Handle client RPC requests */
+        for (size_t i = 2; i < S_POLL_FD_COUNT;) {
+            // errors
+            if (S_POLL_FDS[i].revents & (POLLERR | POLLHUP | POLLNVAL)) {
+                creg_remove(S_POLL_FDS[i].fd);
+                server_remove_pollfd(S_POLL_FDS[i].fd);
+                continue;
+            }
+
+            // normal
+            if (S_POLL_FDS[i].revents & POLLIN) {
+                // do sth
+            }
+            ++i;
+        }
+    mainloop_end:
     }
 
 teardown:

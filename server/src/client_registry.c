@@ -42,17 +42,17 @@ int creg_insert(pid_t client_pid, int c2s_fd, int s2c_fd)
     return SUCCESS;
 }
 
-void creg_remove(pid_t client_pid)
+void creg_remove(int c2s_fd)
 {
     pthread_mutex_lock(&cr_lock);
 
-    // assert > 0
+    // assert not 0 1 2 HSK_R RPC_R
 
     if (cr_count) {
         // find
         ActiveClient *prev = NULL;
         ActiveClient *curr = cr_clients;
-        while (curr && curr->client_pid != client_pid) {
+        while (curr && curr->c2s_fd != c2s_fd) {
             prev = curr;
             curr = curr->next;
         }
@@ -71,9 +71,9 @@ void creg_remove(pid_t client_pid)
             close(curr->s2c_fd);
 
             char temp[FIFO_MAX_NAME];
-            set_name(temp, C2S, client_pid);
+            set_name(temp, C2S, curr->client_pid);
             unlink(temp);
-            set_name(temp, S2C, client_pid);
+            set_name(temp, S2C, curr->client_pid);
             unlink(temp);
 
             free(curr);

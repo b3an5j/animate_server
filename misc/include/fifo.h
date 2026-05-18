@@ -8,6 +8,6 @@ typedef enum {
     S2C
 } FifoType;
 
-void set_name(const char *buf, FifoType type, pid_t pid);
+void set_name(char *buf, FifoType type, pid_t pid);
 
 #endif /* FIFO_H */

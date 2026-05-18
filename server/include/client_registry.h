@@ -25,7 +25,7 @@ extern volatile ClientRegistry CLIENT_REGISTRY;
 
 void creg_init();
 int  creg_insert(pid_t client_pid, int c2s_fd, int s2c_fd);
-void creg_remove(pid_t client_pid);
+void creg_remove(int c2s_fd);
 void creg_destroy();
 
 #endif /* CLIENT_REGISTRY_H */

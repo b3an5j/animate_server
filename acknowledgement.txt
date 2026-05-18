@@ -3,3 +3,4 @@ https://www.cs.wm.edu/~smherwig/courses/csci415-common/signals/sa_siginfo/index.
 https://git.jordan.im/go/commit/?h=go1.20.13&id=7c87012f041948af55d323fc5447230c930e79aa
 https://docs.kernel.org/process/volatile-considered-harmful.html
 https://stackoverflow.com/questions/23813383/is-the-extern-keyword-necessary-when-referring-a-volatile-variable-declared-in-a
+https://softwareengineering.stackexchange.com/questions/371309/is-it-better-to-retry-on-the-client-or-the-server

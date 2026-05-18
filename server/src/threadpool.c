@@ -15,6 +15,9 @@
 #include "task.h"
 #include "threadpool.h"
 
+#define MAX_OPEN_RETRIES 10
+#define OPEN_WAIT_TIME 10000000 // 10 ms
+
 ThreadPool THREADPOOL;
 
 int get_threadpool_size(int argc, char **argv)
@@ -83,10 +86,21 @@ static void *worker_routine(void *)
             if (w_temp == -1) {
                 if (errno == ENXIO) { // give chance
                     struct timespec t_temp = {0};
-                    t_temp.tv_nsec         = 1000000;
-                    nanosleep(&t_temp, NULL);
+                    t_temp.tv_nsec         = OPEN_WAIT_TIME;
 
-                    w_temp = open(task->task_s2c_name, O_NONBLOCK | O_WRONLY);
+                    for (int attempts = 0; attempts < MAX_OPEN_RETRIES;
+                         ++attempts) {
+                        w_temp =
+                            open(task->task_s2c_name, O_NONBLOCK | O_WRONLY);
+
+                        if (w_temp != -1)
+                            break;
+
+                        if (errno == ENXIO)
+                            nanosleep(&t_temp, NULL);
+                        else // other err
+                            break;
+                    }
                 }
 
                 if (w_temp == -1) {

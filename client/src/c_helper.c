@@ -163,10 +163,7 @@ int perform_handshake()
     sigprocmask(SIG_SETMASK, &oldmask, NULL);
 
     if (CONNECTION_STATE == TIMED_OUT) {
-        fprintf(stderr, "%s", errs[TIMEDOUT]);
-        fflush(stderr);
-        retval = TIMEDOUT;
-        return TIMEDOUT;
+        goto hsk_to;
     }
 
     // open the server fifo
@@ -177,12 +174,7 @@ int perform_handshake()
     int r_temp = set_name(name_temp, S2C, getpid());
     r_temp     = open(name_temp, O_RDONLY);
     if (r_temp == -1) {
-        CONNECTION_STATE = DISCONNECTED;
-
-        fprintf(stderr, errs[PIPE_FAIL], getpid());
-        fflush(stderr);
-        retval = PIPE_FAIL;
-        return PIPE_FAIL;
+        goto hsk_fail;
     }
     S_READ = r_temp;
 
@@ -191,12 +183,7 @@ int perform_handshake()
     int w_temp = open(name_temp, O_WRONLY);
     if (w_temp == -1) {
         close(S_READ);
-        CONNECTION_STATE = DISCONNECTED;
-
-        fprintf(stderr, errs[PIPE_FAIL], getpid());
-        fflush(stderr);
-        retval = PIPE_FAIL;
-        return PIPE_FAIL;
+        goto hsk_fail;
     }
     C_WRITE = w_temp;
 
@@ -205,4 +192,18 @@ int perform_handshake()
     printf("Connected to %d.\n", SERVER_PID);
     fflush(stdout);
     return SUCCESS;
+
+hsk_to:
+    fprintf(stderr, "%s", errs[TIMEDOUT]);
+    fflush(stderr);
+    retval = TIMEDOUT;
+    return TIMEDOUT;
+
+hsk_fail:
+    CONNECTION_STATE = DISCONNECTED;
+
+    fprintf(stderr, errs[PIPE_FAIL], getpid());
+    fflush(stderr);
+    retval = PIPE_FAIL;
+    return PIPE_FAIL;
 }

@@ -1,7 +1,7 @@
 #include "fifo.h"
 #include <stdio.h>
 
-void set_name(const char *buf, FifoType type, pid_t pid)
+void set_name(char *buf, FifoType type, pid_t pid)
 {
     switch (type) {
     case C2S:

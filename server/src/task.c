@@ -1,7 +1,9 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
+#include "client_registry.h"
 #include "errors.h"
 #include "task.h"
 
@@ -16,10 +18,9 @@ void task_init()
     pthread_cond_init(&tq_not_empty, NULL);
 }
 
-int task_enqueue(TaskType type, //
-                 pid_t    client_pid,
-                 int      c2s_fd,
-                 int      s2c_fd)
+ErrType task_enqueue(TaskType      type, //
+                     const char   *request,
+                     ActiveClient *client)
 {
     Task *newtask = malloc(sizeof(*newtask));
     if (newtask == NULL) {
@@ -29,20 +30,20 @@ int task_enqueue(TaskType type, //
         return TQ_FAIL;
     }
 
-    newtask->type = type;
-    newtask->next = NULL;
+    newtask->type       = type;
+    newtask->next       = NULL;
+    newtask.task_client = client;
 
     switch (type) {
     case HANDSHAKE:
     case GOODBYE:
-        newtask->task_client_pid = client_pid;
-        set_name(newtask->task_c2s_name, C2S, client_pid);
-        set_name(newtask->task_s2c_name, S2C, client_pid);
+        set_name(newtask->task_c2s_name, C2S, client->client_pid);
+        set_name(newtask->task_s2c_name, S2C, client->client_pid);
         break;
 
+    case AUTHORISE:
     case RPC:
-        newtask->task_c2s_fd = c2s_fd;
-        newtask->task_s2c_fd = s2c_fd;
+        strcpy(newtask.task_request, request);
         break;
 
     default:
@@ -99,13 +100,6 @@ Task *task_dequeue()
 
     pthread_mutex_unlock(&tq_lock);
     return currtask;
-}
-
-void task_unqueue(pid_t client_pid)
-{
-    pthread_mutex_lock(&tq_lock);
-
-    pthread_mutex_unlock(&tq_lock);
 }
 
 void task_destroy()

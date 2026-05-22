@@ -1,9 +1,13 @@
 #define _POSIX_C_SOURCE 200809L
 
+#include <ctype.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -11,8 +15,8 @@
 #include "errors.h"
 #include "fifo.h"
 
-volatile sig_atomic_t CONNECTION_STATE = IDLE;
-int                   C_FDS[2];
+/* Handshake */
+int C_FDS[2];
 
 int set_serverpid(int argc, char *argv[])
 {
@@ -67,6 +71,7 @@ int client_setup_signals()
     if (sigaction(SIGUSR2, &sa, NULL) == -1) {
         fprintf(stderr, errs[SIG_FAIL]);
         fflush(stderr);
+        retval = SIG_FAIL;
         return SIG_FAIL;
     }
 
@@ -75,6 +80,7 @@ int client_setup_signals()
     if (sigaction(SIGALRM, &sa, NULL) == -1) {
         fprintf(stderr, errs[SIG_FAIL]);
         fflush(stderr);
+        retval = SIG_FAIL;
         return SIG_FAIL;
     }
 
@@ -84,6 +90,7 @@ int client_setup_signals()
     if (sigaction(SIGINT, &sa, NULL) == -1) {
         fprintf(stderr, errs[SIG_FAIL]);
         fflush(stderr);
+        retval = SIG_FAIL;
         return SIG_FAIL;
     }
 
@@ -93,6 +100,7 @@ int client_setup_signals()
     if (sigaction(SIGTERM, &sa, NULL) == -1) {
         fprintf(stderr, errs[SIG_FAIL]);
         fflush(stderr);
+        retval = SIG_FAIL;
         return SIG_FAIL;
     }
 
@@ -102,6 +110,7 @@ int client_setup_signals()
     if (sigaction(SIGQUIT, &sa, NULL) == -1) {
         fprintf(stderr, errs[SIG_FAIL]);
         fflush(stderr);
+        retval = SIG_FAIL;
         return SIG_FAIL;
     }
 
@@ -111,6 +120,7 @@ int client_setup_signals()
     if (sigaction(SIGHUP, &sa, NULL) == -1) {
         fprintf(stderr, errs[SIG_FAIL]);
         fflush(stderr);
+        retval = SIG_FAIL;
         return SIG_FAIL;
     }
 
@@ -129,8 +139,6 @@ static void reset_alarm_handler()
         fflush(stderr);
     }
 }
-
-void perform_goodbye();
 
 int perform_handshake()
 {
@@ -206,4 +214,38 @@ hsk_fail:
     fflush(stderr);
     retval = PIPE_FAIL;
     return PIPE_FAIL;
+}
+
+/* RPC request */
+static char INPUT[MAX_BUF_LEN];
+static char OUTPUT[MAX_BUF_LEN];
+
+void authorise()
+{
+    char *ret;
+    while (CONNECTION_STATE == CONNECTED && !LOGGED_IN &&
+           (ret = fgets(INPUT, MAX_BUF_LEN, stdin))) {
+
+        sanitise_whitespace(INPUT);
+        if (!*INPUT) {
+            continue;
+        }
+
+        // login attempt
+        if (strncmp(INPUT, "Login ", 6) == 0) {
+            write(C_WRITE, INPUT, strlen(INPUT) + 1);
+            read_until_delim(S_READ, )
+        }
+        else {
+            printf("Not logged in\n");
+            fflush(stdout);
+        }
+    }
+}
+
+int get_user_input()
+{
+    system("cowsay lmao");
+    LOGGED_IN = 0;
+    return 0;
 }

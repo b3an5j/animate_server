@@ -8,34 +8,28 @@
 extern volatile sig_atomic_t RUNNING;
 
 /* Task */
-typedef enum {
-    HANDSHAKE,
-    RPC,
-    GOODBYE
-} TaskType;
-
 typedef struct Task {
-    TaskType type;
+    TaskType      type;
+    ActiveClient *client;
     union {
         struct {
-            pid_t client_pid;
-            char  c2s_name[FIFO_MAX_NAME];
-            char  s2c_name[FIFO_MAX_NAME];
+            char c2s_name[FIFO_MAX_NAME];
+            char s2c_name[FIFO_MAX_NAME];
         } fifo;
         struct {
-            int c2s_fd;
-            int s2c_fd;
+            char request[MAX_RPC_BUF_LEN];
+            int  s2c_fd;
         } rpc;
     } info;
     struct Task *next;
 } Task;
 
 // Task aliases
-#define task_client_pid info.fifo.client_pid
+#define task_client info.fifo.client
 #define task_c2s_name info.fifo.c2s_name
 #define task_s2c_name info.fifo.s2c_name
-#define task_c2s_fd info.rpc.c2s_fd
 #define task_s2c_fd info.rpc.s2c_fd
+#define task_request info.rpc.request
 
 /* Task result */
 typedef struct {
@@ -68,13 +62,11 @@ extern volatile TaskQueue TASK_Q;
 #define tq_lock TASK_Q.lock
 #define tq_not_empty TASK_Q.not_empty
 
-void  task_init();
-void  task_enqueue(TaskType type, //
-                   pid_t    client_pid,
-                   int      c2s_fd,
-                   int      s2c_fd);
-Task *task_dequeue();
-void  task_unqueue(pid_t client_pid);
-void  task_destroy();
+void    task_init();
+ErrType task_enqueue(TaskType      type, //
+                     const char   *request,
+                     ActiveClient *client);
+Task   *task_dequeue();
+void    task_destroy();
 
 #endif /* TASK_H */

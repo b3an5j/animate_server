@@ -4,6 +4,7 @@
 #include "errors.h"
 #include <sys/types.h>
 
+/* Handshake */
 extern pid_t                 SERVER_PID;
 extern volatile sig_atomic_t CONNECTION_STATE;
 extern int                   C_FDS[2];
@@ -23,5 +24,11 @@ typedef enum {
 int set_serverpid(int argc, char *argv[]);
 int client_setup_signals();
 int perform_handshake();
+
+/* RPC request */
+extern unsigned char LOGGED_IN;
+
+void authorise();
+int  get_user_input();
 
 #endif /* C_HELPER_H */

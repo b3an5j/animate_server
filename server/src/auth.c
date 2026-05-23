@@ -62,7 +62,11 @@ void schedule_disconnect(ActiveClient *client)
     dc->client          = client;
 
     gettimeofday(&dc->when, NULL);
-    dc->when.tv_sec += 1; // add 1
+    dc->when.tv_usec += 500000;
+    if (dc->when.tv_usec >= 1000000) {
+        dc->when.tv_sec += 1;
+        dc->when.tv_usec -= 1000000;
+    }
 
     dc->next  = disc_head;
     disc_head = dc;

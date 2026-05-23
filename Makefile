@@ -12,7 +12,9 @@ OBJDIR = obj
 MISC_SRC = misc/src/fifo.c misc/src/errors.c misc/src/dbg.c
 
 CLIENT_SRC = client/src/animate_client.c \
-             client/src/c_helper.c
+             client/src/c_helper.c\
+             client/src/receiver.c\
+             client/src/sender.c
 
 SERVER_SRC = server/src/animate_server.c \
              server/src/s_helper.c \

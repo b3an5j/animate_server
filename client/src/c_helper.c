@@ -1,8 +1,6 @@
-#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -57,6 +55,7 @@ static void alarm_handler(int signum)
 static void shutdown_handler(int signum)
 {
     (void)signum;
+    debug_log("Shutdown called");
     CONNECTION_STATE = DISCONNECTED;
 }
 
@@ -156,6 +155,7 @@ int perform_handshake()
 
         alarm(0);
         sigprocmask(SIG_SETMASK, &oldmask, NULL);
+        retval = SIG_FAIL;
         return SIG_FAIL;
     }
 
@@ -279,34 +279,4 @@ void authorise()
         LOGGED_IN = 1;
         return;
     }
-}
-
-int get_user_input(char *out)
-{
-    // Read a line from stdin
-    if (!fgets(out, MAX_RPC_BUF_LEN, stdin)) {
-        return -1;
-    }
-
-    sanitise_whitespace(out);
-    if (out[0] == '\0') {
-        return 1; // continue
-    }
-
-    debug_log("After sanitise: %s\n", out);
-
-    // Detect Disconnect
-    if (strcmp(out, "Disconnect") == 0) {
-        const char *msg = "Disconnect\n";
-        write_block_pipe(C_WRITE, msg, strlen(msg));
-        return 0; // break loop
-    }
-
-    // Normal RPC
-    char sendbuf[MAX_RPC_BUF_LEN];
-    snprintf(sendbuf, sizeof(sendbuf), "%s\n", out);
-
-    write_block_pipe(C_WRITE, sendbuf, strlen(sendbuf));
-
-    return 1; // continue loop
 }

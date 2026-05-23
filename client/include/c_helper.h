@@ -2,6 +2,8 @@
 #define C_HELPER_H
 
 #include "errors.h"
+#include "receiver.h"
+#include <signal.h>
 #include <sys/types.h>
 
 /* Handshake */
@@ -25,10 +27,8 @@ int set_serverpid(int argc, char *argv[]);
 int client_setup_signals();
 int perform_handshake();
 
-/* RPC request */
+/* Login */
 extern unsigned char LOGGED_IN;
-
-void authorise();
-int  get_user_input(char *out);
+void                 authorise();
 
 #endif /* C_HELPER_H */

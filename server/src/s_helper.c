@@ -13,6 +13,7 @@
 #include <unistd.h>
 
 #include "client_registry.h"
+#include "dbg.h"
 #include "errors.h"
 #include "fifo.h"
 #include "s_helper.h"
@@ -87,6 +88,9 @@ void destroy_client_pipes(pid_t client_pid, int c2s_fd, int s2c_fd)
     unlink(temp);
     set_name(temp, S2C, client_pid);
     unlink(temp);
+
+    debug_log(
+        "Closing c2s_fd=%d s2c_fd=%d for pid=%d", c2s_fd, s2c_fd, client_pid);
 }
 
 int server_grow_pollslots()

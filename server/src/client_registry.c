@@ -8,7 +8,7 @@
 #include "fifo.h"
 #include "s_helper.h"
 
-volatile ClientRegistry CLIENT_REGISTRY;
+ClientRegistry CLIENT_REGISTRY;
 
 void creg_init()
 {
@@ -23,7 +23,7 @@ ActiveClient *creg_insert(pid_t client_pid, int c2s_fd, int s2c_fd)
 
     ActiveClient *newclient = malloc(sizeof(*newclient));
     if (newclient == NULL) {
-        fprintf(stderr, errs[CR_FAIL]);
+        fputs(errs[CR_FAIL], stderr);
         fflush(stderr);
         return NULL;
     }
@@ -32,11 +32,10 @@ ActiveClient *creg_insert(pid_t client_pid, int c2s_fd, int s2c_fd)
     newclient->c2s_fd     = c2s_fd;
     newclient->s2c_fd     = s2c_fd;
     newclient->refcount   = 1; // creg holds 1
-    newclient->logged_in  = false;
-    newclient->dead       = false;
+    newclient->logged_in  = 0;
+    newclient->dead       = 0;
     newclient->next       = NULL;
     newclient->prev       = NULL;
-    pthread_mutex_init(&newclient->lock, NULL);
 
     pthread_mutex_lock(&cr_lock);
 
@@ -55,40 +54,37 @@ ActiveClient *creg_insert(pid_t client_pid, int c2s_fd, int s2c_fd)
 ErrType creg_acquire_client(ActiveClient *client)
 {
     ErrType ret = FAIL;
-    pthread_mutex_lock(&client->lock);
+    pthread_mutex_lock(&cr_lock);
     if (!client->dead) {
         client->refcount++;
         ret = SUCCESS;
     }
-    pthread_mutex_unlock(&client->lock);
+    pthread_mutex_unlock(&cr_lock);
     return ret;
 }
 
 void creg_release_client(ActiveClient *client)
 {
-    uint8_t destroy = false;
-    pthread_mutex_lock(&client->lock);
+    uint8_t destroy = 0;
 
+    pthread_mutex_lock(&cr_lock);
     // assert refcount > 0
     client->refcount--;
     if (client->dead && client->refcount == 0) {
-        destroy = true;
+        destroy = 1;
     }
-    pthread_mutex_unlock(&client->lock);
+    pthread_mutex_unlock(&cr_lock);
 
     if (destroy) {
         destroy_client_pipes(
             client->client_pid, client->c2s_fd, client->s2c_fd);
-        pthread_mutex_destroy(&client->lock);
-        free(c);
+        free(client);
     }
 }
 
 static void client_markdead(ActiveClient *client)
 {
-    pthread_mutex_lock(&client->lock);
-    client->dead = true;
-    pthread_mutex_unlock(&client->lock);
+    client->dead = 1;
 }
 
 static void creg_unlink(ActiveClient *client)
@@ -97,25 +93,31 @@ static void creg_unlink(ActiveClient *client)
         return;
 
     pthread_mutex_lock(&cr_lock);
-    if (cr_clients) {
+
+    ActiveClient *curr = cr_clients;
+    while (curr && curr != client) {
+        curr = curr->next;
+    }
+
+    if (!curr) {
         pthread_mutex_unlock(&cr_lock);
         return;
     }
 
-    if (client->prev) {
-        client->prev->next = client->next;
+    if (curr->prev) {
+        curr->prev->next = curr->next;
     }
-    else { // head
-        cr_clients = client->next;
+    else {
+        cr_clients = curr->next;
     }
 
-    if (client->next) {
-        client->next->prev = client->prev;
+    if (curr->next) {
+        curr->next->prev = curr->prev;
     }
+    cr_count--;
 
     client->next = NULL;
     client->prev = NULL;
-    cr_count--;
     pthread_mutex_unlock(&cr_lock);
 }
 

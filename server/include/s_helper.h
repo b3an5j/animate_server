@@ -4,9 +4,13 @@
 #include "client_registry.h"
 #include "errors.h"
 #include <poll.h>
+#include <signal.h>
 #include <sys/types.h>
 
 #define POLLFD_INIT_N 32
+#define HSK_MAX_PER_WAKE 5
+#define RPC_MAX_PER_WAKE 5
+#define FIFO_MAX_PER_WAKE 5
 
 extern volatile sig_atomic_t RUNNING;
 
@@ -19,24 +23,19 @@ extern int RPC_PIPE[2];
 #define RPC_W RPC_PIPE[1]
 
 typedef struct {
-    struct pollfd pfd;
-    ActiveClient *client;
-} PollSlot;
-
-typedef struct {
-    PollSlot *data;
-    size_t    capacity;
-    size_t    count;
+    struct pollfd *pfds;
+    ActiveClient **clients;
+    size_t         capacity;
+    size_t         count;
 } PollSlots;
 
 extern PollSlots POLLSLOTS;
-#define S_POLL_SLOTS POLLSLOTS.data
-#define HSK_SLOT S_POLL_SLOTS[0]
-#define RPC_SLOT S_POLL_SLOTS[1]
-#define HSK_POLLFD HSK_SLOT.pfd
-#define RPC_POLLFD RPC_SLOT.pfd
+#define S_POLL_PFDS POLLSLOTS.pfds
+#define S_POLL_CLIENT POLLSLOTS.clients
 #define S_POLL_FD_CAPACITY POLLSLOTS.capacity
 #define S_POLL_FD_COUNT POLLSLOTS.count
+#define HSK_POLLFD S_POLL_PFDS[0]
+#define RPC_POLLFD S_POLL_PFDS[1]
 
 int  server_setup_pipes();
 void server_destroy_selfpipes();
@@ -48,12 +47,5 @@ void server_remove_pollslots(int fd);
 void server_destroy_pollslots();
 
 int server_setup_signals();
-
-#define MAX_UTXT_LINEBUF_LEN 64
-
-extern FILE *USERTXT;
-int          usertxt_check();
-void         usertxt_get_balance(const char *username, uint16_t len);
-void         usertxt_close();
 
 #endif /* S_HELPER_H */

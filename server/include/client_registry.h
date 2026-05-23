@@ -1,6 +1,10 @@
 #ifndef CLIENT_REGISTRY_H
 #define CLIENT_REGISTRY_H
 
+#include "errors.h"
+#include "fifo.h"
+#include <pthread.h>
+#include <signal.h>
 #include <stdint.h>
 #include <sys/types.h>
 
@@ -13,9 +17,9 @@ typedef struct ActiveClient {
     size_t               refcount;
     uint8_t              logged_in;
     uint8_t              dead;
+    char                 username[MAX_USERNAME_LEN + 1];
     struct ActiveClient *next;
     struct ActiveClient *prev;
-    pthread_mutex_t      lock;
 } ActiveClient;
 
 typedef struct {
@@ -24,7 +28,7 @@ typedef struct {
     size_t          count;
 } ClientRegistry;
 
-extern volatile ClientRegistry CLIENT_REGISTRY;
+extern ClientRegistry CLIENT_REGISTRY;
 #define cr_clients CLIENT_REGISTRY.clients
 #define cr_lock CLIENT_REGISTRY.lock
 #define cr_count CLIENT_REGISTRY.count

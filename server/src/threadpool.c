@@ -1,16 +1,17 @@
-#define _POSIX_C_SOURCE 200809L
-
 #include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
 
+#include "auth.h"
+#include "fifo.h"
 #include "s_helper.h"
 #include "task.h"
 #include "threadpool.h"
@@ -37,12 +38,18 @@ int get_threadpool_size(int argc, char **argv)
 
     TPOOL_SIZE = atol(argv[1]);
     if (TPOOL_SIZE <= 0) {
-        fprintf(stderr, "%s\n%s", errs[INV_ARG], s_usage);
+        fprintf(stderr, "%s %ld.\n\n%s", errs[POOL_FAIL], TPOOL_SIZE, s_usage);
         fflush(stderr);
-        retval = INV_ARG;
-        return INV_ARG;
+        retval = POOL_FAIL;
+        return POOL_FAIL;
     }
-    return SUCCESS;
+    else if (TPOOL_SIZE > 0) {
+        return SUCCESS;
+    }
+    fprintf(stderr, "%s\n%s", errs[INV_ARG], s_usage);
+    fflush(stderr);
+    retval = INV_ARG;
+    return INV_ARG;
 }
 
 static void *worker_routine(void *)
@@ -52,25 +59,27 @@ static void *worker_routine(void *)
         if (!task)
             continue;
 
-        TaskResult taskresult;
-        taskresult.type = task->type;
-
         switch (task->type) {
-        case HANDSHAKE:
+        case HANDSHAKE: {
+            TaskResult taskresult;
+            pid_t      client_pid    = task->task_rawpid;
+            taskresult.result_rawpid = client_pid;
+
             // unlink first
             unlink(task->task_c2s_name);
             unlink(task->task_s2c_name);
 
             // make fifo
-            mode_t old_umask = umask(0);
-            if (mkfifo(task->task_c2s_name, 0666) != 0 ||
-                mkfifo(task->task_s2c_name, 0666) != 0) {
+            mode_t  old_umask = umask(0);
+            uint8_t fifo_fail = mkfifo(task->task_c2s_name, 0666) != 0 ||
+                                mkfifo(task->task_s2c_name, 0666) != 0;
+            umask(old_umask);
+            if (fifo_fail) {
                 goto hsk_fail;
             }
-            umask(old_umask);
 
             // signal client
-            if (kill(task->task_client_pid, SIGUSR2) == -1) {
+            if (kill(client_pid, SIGUSR2) == -1) {
                 goto hsk_fail;
             }
 
@@ -109,41 +118,66 @@ static void *worker_routine(void *)
                 }
             }
             taskresult.result_s2c_fd = w_temp;
+
+            taskresult.type = HSK_OK;
+            // ADD INTERNAL ERROR
+            write_block_pipe(RPC_W, &taskresult, sizeof(taskresult));
             break;
 
         hsk_fail:
             unlink(task->task_c2s_name);
             unlink(task->task_s2c_name);
 
-            fprintf(stderr, errs[PIPE_FAIL], task->task_client_pid);
+            fprintf(stderr, "%s %d.\n", errs[PIPE_FAIL], client_pid);
             fflush(stderr);
             // ignore and drop the handshake
             free(task);
             continue;
+        }
+
+        case AUTHORISE: {
+            TaskResult    taskresult;
+            ActiveClient *client     = task->task_client;
+            taskresult.result_client = client;
+
+            long       balance;
+            ResultType ret  = usertxt_get_balance(task->task_request, &balance);
+            taskresult.type = ret;
+            if (ret == AUTH_OK) {
+                taskresult.result_balance = balance;
+                strncpy(taskresult.result_username,
+                        task->task_request,
+                        MAX_USERNAME_LEN - 1);
+                taskresult.result_username[MAX_USERNAME_LEN - 1] = '\0';
+            }
+
+            // ADD INTERNAL ERROR
+            write_block_pipe(RPC_W, &taskresult, sizeof(taskresult));
+            break;
+        }
 
         case RPC:
-            break;
-
-        case GOODBYE:
             break;
 
         default:
             break;
         }
 
-        write(RPC_W, &taskresult, sizeof(TaskResult));
         free(task);
     }
+    return NULL;
 }
 
 int threadpool_init()
 {
-    tpool_threads = malloc(sizeof(*tpool_threads) * TPOOL_SIZE);
-    if (tpool_threads == NULL) {
+    pthread_t *temp;
+    temp = malloc(sizeof(*tpool_threads) * TPOOL_SIZE);
+    if (temp == NULL) {
         fprintf(stderr, errs[POOL_FAIL], TPOOL_SIZE);
         fflush(stderr);
         return POOL_FAIL;
     }
+    tpool_threads = temp;
 
     // assert non negative
 
@@ -156,7 +190,7 @@ int threadpool_init()
 
             // reap
             for (size_t j = 0; j < created; ++j) {
-                pthread_join(&tpool_threads[j], NULL);
+                pthread_join(tpool_threads[j], NULL);
             }
             free(tpool_threads);
             return POOL_FAIL;
@@ -175,7 +209,9 @@ void threadpool_destroy()
     pthread_cond_broadcast(&tq_not_empty);
     pthread_mutex_unlock(&tq_lock);
 
-    for (size_t i = 0; i < TPOOL_SIZE; ++i) {
+    for (long i = 0; i < TPOOL_SIZE; ++i) {
         pthread_join(tpool_threads[i], NULL);
     }
+    free(tpool_threads);
+    tpool_threads = NULL;
 }

@@ -1,16 +1,22 @@
 #ifndef TASK_H
 #define TASK_H
 
+#include "client_registry.h"
 #include "errors.h"
 #include "fifo.h"
+#include <pthread.h>
+#include <signal.h>
 #include <sys/types.h>
 
 extern volatile sig_atomic_t RUNNING;
 
 /* Task */
 typedef struct Task {
-    TaskType      type;
-    ActiveClient *client;
+    TaskType type;
+    union {
+        pid_t         client_pid;
+        ActiveClient *client;
+    } info;
     union {
         struct {
             char c2s_name[FIFO_MAX_NAME];
@@ -20,29 +26,55 @@ typedef struct Task {
             char request[MAX_RPC_BUF_LEN];
             int  s2c_fd;
         } rpc;
-    } info;
+    } data;
     struct Task *next;
 } Task;
 
 // Task aliases
-#define task_client info.fifo.client
-#define task_c2s_name info.fifo.c2s_name
-#define task_s2c_name info.fifo.s2c_name
-#define task_s2c_fd info.rpc.s2c_fd
-#define task_request info.rpc.request
+#define task_client info.client
+#define task_rawpid info.client_pid
+#define task_c2s_name data.fifo.c2s_name
+#define task_s2c_name data.fifo.s2c_name
+#define task_s2c_fd data.rpc.s2c_fd
+#define task_request data.rpc.request
 
 /* Task result */
+typedef enum {
+    HSK_OK,
+    AUTH_OK,
+    AUTH_NO,
+    AUTH_UN,
+    RPC_FAIL,
+    ERR_VAL,
+    INT_ERR,
+    RPC_OK,
+    RPC_OK_RV
+} ResultType;
+
 typedef struct {
-    TaskType type;
-    pid_t    client_pid;
+    ResultType type;
+    union {
+        pid_t         pid;
+        ActiveClient *ptr;
+    } client;
     union {
         int fds[2];
+        struct {
+            char username[MAX_USERNAME_LEN + 1];
+            long balance;
+        } auth;
+        int retval;
     } result;
 } TaskResult;
 
 // Task result aliases
+#define result_rawpid client.pid
+#define result_client client.ptr
 #define result_c2s_fd result.fds[0]
 #define result_s2c_fd result.fds[1]
+#define result_username result.auth.username
+#define result_balance result.auth.balance
+#define result_retval result.retval
 
 /* Task queue */
 typedef struct {
@@ -53,7 +85,7 @@ typedef struct {
     pthread_cond_t  not_empty; // consumer
 } TaskQueue;
 
-extern volatile TaskQueue TASK_Q;
+extern TaskQueue TASK_Q;
 
 // Task queue aliases
 #define tq_head TASK_Q.head
@@ -64,6 +96,7 @@ extern volatile TaskQueue TASK_Q;
 
 void    task_init();
 ErrType task_enqueue(TaskType      type, //
+                     pid_t         client_pid,
                      const char   *request,
                      ActiveClient *client);
 Task   *task_dequeue();

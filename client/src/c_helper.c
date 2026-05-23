@@ -1,5 +1,3 @@
-#define _POSIX_C_SOURCE 200809L
-
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -12,6 +10,7 @@
 #include <unistd.h>
 
 #include "c_helper.h"
+#include "dbg.h"
 #include "errors.h"
 #include "fifo.h"
 
@@ -69,7 +68,7 @@ int client_setup_signals()
     /* SIGUSR2 */
     sa.sa_handler = sigusr2_handler;
     if (sigaction(SIGUSR2, &sa, NULL) == -1) {
-        fprintf(stderr, errs[SIG_FAIL]);
+        fputs(errs[SIG_FAIL], stderr);
         fflush(stderr);
         retval = SIG_FAIL;
         return SIG_FAIL;
@@ -78,7 +77,7 @@ int client_setup_signals()
     /* ALARM */
     sa.sa_handler = alarm_handler;
     if (sigaction(SIGALRM, &sa, NULL) == -1) {
-        fprintf(stderr, errs[SIG_FAIL]);
+        fputs(errs[SIG_FAIL], stderr);
         fflush(stderr);
         retval = SIG_FAIL;
         return SIG_FAIL;
@@ -88,7 +87,7 @@ int client_setup_signals()
     sa.sa_flags   = 0;
     sa.sa_handler = shutdown_handler;
     if (sigaction(SIGINT, &sa, NULL) == -1) {
-        fprintf(stderr, errs[SIG_FAIL]);
+        fputs(errs[SIG_FAIL], stderr);
         fflush(stderr);
         retval = SIG_FAIL;
         return SIG_FAIL;
@@ -98,7 +97,7 @@ int client_setup_signals()
     sa.sa_flags   = 0;
     sa.sa_handler = shutdown_handler;
     if (sigaction(SIGTERM, &sa, NULL) == -1) {
-        fprintf(stderr, errs[SIG_FAIL]);
+        fputs(errs[SIG_FAIL], stderr);
         fflush(stderr);
         retval = SIG_FAIL;
         return SIG_FAIL;
@@ -108,7 +107,7 @@ int client_setup_signals()
     sa.sa_flags   = 0;
     sa.sa_handler = shutdown_handler;
     if (sigaction(SIGQUIT, &sa, NULL) == -1) {
-        fprintf(stderr, errs[SIG_FAIL]);
+        fputs(errs[SIG_FAIL], stderr);
         fflush(stderr);
         retval = SIG_FAIL;
         return SIG_FAIL;
@@ -118,7 +117,7 @@ int client_setup_signals()
     sa.sa_flags   = 0;
     sa.sa_handler = shutdown_handler;
     if (sigaction(SIGHUP, &sa, NULL) == -1) {
-        fprintf(stderr, errs[SIG_FAIL]);
+        fputs(errs[SIG_FAIL], stderr);
         fflush(stderr);
         retval = SIG_FAIL;
         return SIG_FAIL;
@@ -179,8 +178,8 @@ int perform_handshake()
 
     // read end
     alarm(1);
-    int r_temp = set_name(name_temp, S2C, getpid());
-    r_temp     = open(name_temp, O_RDONLY);
+    set_name(name_temp, S2C, getpid());
+    int r_temp = open(name_temp, O_RDONLY);
     if (r_temp == -1) {
         goto hsk_fail;
     }
@@ -217,35 +216,97 @@ hsk_fail:
 }
 
 /* RPC request */
-static char INPUT[MAX_BUF_LEN];
-static char OUTPUT[MAX_BUF_LEN];
+static char INPUT[MAX_RPC_BUF_LEN];
 
 void authorise()
 {
     char *ret;
-    while (CONNECTION_STATE == CONNECTED && !LOGGED_IN &&
-           (ret = fgets(INPUT, MAX_BUF_LEN, stdin))) {
 
+    while (CONNECTION_STATE == CONNECTED && !LOGGED_IN &&
+           (ret = fgets(INPUT, MAX_RPC_BUF_LEN, stdin))) {
+
+        // strip newline
+        size_t len = strlen(INPUT);
+        if (len > 0 && INPUT[len - 1] == '\n')
+            INPUT[len - 1] = '\0';
+
+        // collapse whitespace
         sanitise_whitespace(INPUT);
-        if (!*INPUT) {
+        if (!*INPUT)
+            continue;
+
+        // attempt
+        if (strncmp(INPUT, "Login ", 6) != 0) {
+            printf("Not logged in\n");
+            fflush(stdout);
             continue;
         }
 
-        // login attempt
-        if (strncmp(INPUT, "Login ", 6) == 0) {
-            write(C_WRITE, INPUT, strlen(INPUT) + 1);
-            read_until_delim(S_READ, )
+        // add newline back
+        char outbuf[MAX_RPC_BUF_LEN + 1];
+        snprintf(outbuf, sizeof(outbuf), "%s\n", INPUT);
+
+        // send exactly one text command
+        write_block_pipe(C_WRITE, outbuf, strlen(outbuf));
+
+        // read server reply
+        char   reply[MAX_RPC_BUF_LEN];
+        size_t reply_len;
+
+        ErrType r =
+            read_until_delim(S_READ, reply, MAX_RPC_BUF_LEN, '\n', &reply_len);
+        if (r != SUCCESS) {
+            printf("Server disconnected\n");
+            return;
         }
-        else {
-            printf("Not logged in\n");
+
+        reply[reply_len] = '\0';
+
+        // handle reply
+        if (strncmp(reply, "Reject", 6) == 0) {
+            // print rejection
+            printf("%s\n", reply);
             fflush(stdout);
+            CONNECTION_STATE = DISCONNECTED;
+            return;
         }
+        long        balance  = strtol(reply, NULL, 10);
+        const char *username = INPUT + 6;
+
+        printf("Welcome %s. Your balance is %ld\n", username, balance);
+        fflush(stdout);
+
+        LOGGED_IN = 1;
+        return;
     }
 }
 
-int get_user_input()
+int get_user_input(char *out)
 {
-    system("cowsay lmao");
-    LOGGED_IN = 0;
-    return 0;
+    // Read a line from stdin
+    if (!fgets(out, MAX_RPC_BUF_LEN, stdin)) {
+        return -1;
+    }
+
+    sanitise_whitespace(out);
+    if (out[0] == '\0') {
+        return 1; // continue
+    }
+
+    debug_log("After sanitise: %s\n", out);
+
+    // Detect Disconnect
+    if (strcmp(out, "Disconnect") == 0) {
+        const char *msg = "Disconnect\n";
+        write_block_pipe(C_WRITE, msg, strlen(msg));
+        return 0; // break loop
+    }
+
+    // Normal RPC
+    char sendbuf[MAX_RPC_BUF_LEN];
+    snprintf(sendbuf, sizeof(sendbuf), "%s\n", out);
+
+    write_block_pipe(C_WRITE, sendbuf, strlen(sendbuf));
+
+    return 1; // continue loop
 }

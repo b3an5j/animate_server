@@ -29,6 +29,6 @@ int perform_handshake();
 extern unsigned char LOGGED_IN;
 
 void authorise();
-int  get_user_input();
+int  get_user_input(char *out);
 
 #endif /* C_HELPER_H */

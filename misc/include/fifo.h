@@ -2,6 +2,7 @@
 #define FIFO_H
 
 #include "errors.h"
+#include <sys/types.h>
 
 #define FIFO_MAX_NAME 64
 #define MAX_USERNAME_LEN 32
@@ -15,13 +16,22 @@ typedef enum {
 typedef enum {
     HANDSHAKE,
     AUTHORISE,
-    RPC,
-    GOODBYE
+    RPC
 } TaskType;
 
-void    set_name(char *buf, FifoType type, pid_t pid);
-void    sanitise_whitespace(char *str);
+void set_name(char *buf, FifoType type, pid_t pid);
+void sanitise_whitespace(char *str);
+
+ErrType write_rpc_msg(int fd, const void *buf, size_t len);
+ErrType read_rpc_msg(int fd, void *buf, size_t maxlen, size_t *out_len);
+
+ErrType write_nonblock_pipe(int fd, const void *buf, size_t n_target);
+ErrType write_block_pipe(int fd, const void *buf, size_t n_target);
 ErrType read_nonblock_pipe(int fd, void *buf, size_t n_target);
-ErrType read_until_delim(int fd, void *buf, size_t maxlen, char delim);
+ErrType read_until_delim(int     fd,
+                         char   *buf,
+                         size_t  maxlen,
+                         char    delim,
+                         size_t *out_len);
 
 #endif /* FIFO_H */

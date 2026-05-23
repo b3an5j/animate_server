@@ -1,5 +1,3 @@
-#define _POSIX_C_SOURCE 200809L
-
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
@@ -13,57 +11,64 @@
 
 #include <animate/animate.h>
 
+#include "auth.h"
 #include "client_registry.h"
+#include "commands.h"
+#include "dbg.h"
 #include "errors.h"
 #include "fifo.h"
 #include "s_helper.h"
 #include "task.h"
 #include "threadpool.h"
 
-volatile sig_atomic_t RUNNING = 0;
+volatile sig_atomic_t RUNNING = 1;
+ErrType               retval  = SUCCESS;
 
 int main(int argc, char **argv, char **envp)
 {
     (void)envp;
 
+    EN_DEBUG = 1;
+
     /* Start procedure */
     // block, no interruption
-    sigset_t mask, oldmask;
-    sigfillset(&mask);
-    sigprocmask(SIG_BLOCK, &mask, &oldmask);
+    sigset_t all;
+    sigfillset(&all);
+    pthread_sigmask(SIG_BLOCK, &all, NULL);
 
     if (get_threadpool_size(argc, argv) != SUCCESS ||
         usertxt_check() != SUCCESS) {
-        sigprocmask(SIG_SETMASK, &oldmask, NULL);
         goto teardown;
     }
 
     creg_init();
     task_init();
-
-    if (server_setup_pipes() != SUCCESS || server_setup_signals() != SUCCESS) {
-        sigprocmask(SIG_SETMASK, &oldmask, NULL);
+    if (server_setup_pipes() != SUCCESS) {
         goto teardown;
     }
+
     if (threadpool_init() != SUCCESS) { // signal deaf threads
-        sigprocmask(SIG_SETMASK, &oldmask, NULL);
+        goto teardown;
+    }
+    if (server_setup_signals() != SUCCESS) {
         goto teardown;
     }
 
     pid_t SERVER_PID = getpid();
     printf("Server PID: %d\n", SERVER_PID);
     fflush(stdout);
-    RUNNING = 1;
 
     // return the mask
-    sigprocmask(SIG_SETMASK, &oldmask, NULL);
+    pthread_sigmask(SIG_UNBLOCK, &all, NULL);
 
     /* Waiting handshake or RPC */
     while (RUNNING) {
-        int ready = poll(S_POLL_SLOTS, S_POLL_FD_COUNT, -1);
+        int ready = poll(S_POLL_PFDS, S_POLL_FD_COUNT, -1);
         if (ready == -1) {
-            if (errno == EINTR)
+            if (errno == EINTR) {
+                debug_log("Poll interrupted by signal");
                 continue;
+            }
             perror("Poll failure");
             break;
         }
@@ -72,8 +77,8 @@ int main(int argc, char **argv, char **envp)
         if (HSK_POLLFD.revents & POLLIN) {
             pid_t client_pid;
 
-            // exhaust the pipe
-            while (true) {
+            debug_log("Entered handshake request handler");
+            for (int i = 0; RUNNING && i < HSK_MAX_PER_WAKE; i++) {
                 ErrType pipe_ret =
                     read_nonblock_pipe(HSK_R, &client_pid, sizeof(client_pid));
 
@@ -82,7 +87,7 @@ int main(int argc, char **argv, char **envp)
                 }
 
                 if (pipe_ret == PIPE_CLOSED) {
-                    fprintf(stderr, errs[PIPE_CLOSED], "Inter thread");
+                    fprintf(stderr, "%s %s", "Inter thread", errs[PIPE_CLOSED]);
                     fflush(stderr);
                     RUNNING = 0;
                     retval  = PIPE_CLOSED;
@@ -90,7 +95,8 @@ int main(int argc, char **argv, char **envp)
                 }
 
                 if (pipe_ret == PIPE_PARTIAL) {
-                    fprintf(stderr, errs[PIPE_PARTIAL], "Inter thread");
+                    fprintf(
+                        stderr, "%s %s", "Inter thread", errs[PIPE_PARTIAL]);
                     fflush(stderr);
                     RUNNING = 0;
                     retval  = PIPE_PARTIAL;
@@ -111,7 +117,7 @@ int main(int argc, char **argv, char **envp)
                     goto mainloop_end;
                 }
 
-                task_enqueue(HANDSHAKE, client_pid, 0);
+                task_enqueue(HANDSHAKE, client_pid, NULL, NULL);
             }
         }
 
@@ -119,8 +125,8 @@ int main(int argc, char **argv, char **envp)
         if (RPC_POLLFD.revents & POLLIN) {
             TaskResult taskresult;
 
-            // exhaust the pipe
-            while (true) {
+            debug_log("Entered inter thread handler");
+            for (int i = 0; RUNNING && i < RPC_MAX_PER_WAKE; i++) {
                 ErrType pipe_ret =
                     read_nonblock_pipe(RPC_R, &taskresult, sizeof(taskresult));
 
@@ -129,7 +135,7 @@ int main(int argc, char **argv, char **envp)
                 }
 
                 if (pipe_ret == PIPE_CLOSED) {
-                    fprintf(stderr, errs[PIPE_CLOSED], "Inter thread");
+                    fprintf(stderr, "%s %s", "Inter thread", errs[PIPE_CLOSED]);
                     fflush(stderr);
                     RUNNING = 0;
                     retval  = PIPE_CLOSED;
@@ -137,7 +143,8 @@ int main(int argc, char **argv, char **envp)
                 }
 
                 if (pipe_ret == PIPE_PARTIAL) {
-                    fprintf(stderr, errs[PIPE_PARTIAL], "Inter thread");
+                    fprintf(
+                        stderr, "%s %s", "Inter thread", errs[PIPE_PARTIAL]);
                     fflush(stderr);
                     RUNNING = 0;
                     retval  = PIPE_PARTIAL;
@@ -145,7 +152,10 @@ int main(int argc, char **argv, char **envp)
                 }
 
                 if (pipe_ret == PIPE_READ_FAIL) {
-                    fprintf(stderr, errs[PIPE_READ_FAIL], "Inter thread");
+                    fprintf(stderr,
+                            "%s %s.\n",
+                            errs[PIPE_READ_FAIL],
+                            "Inter thread");
                     fflush(stderr);
                     RUNNING = 0;
                     retval  = PIPE_READ_FAIL;
@@ -159,95 +169,153 @@ int main(int argc, char **argv, char **envp)
                 }
 
                 switch (taskresult.type) {
-                case HANDSHAKE: {
-                    pid_t client = taskresult.client_pid;
-                    int   c2s_fd = taskresult.result_c2s_fd;
-                    int   s2c_fd = taskresult.result_s2c_fd;
-
+                case HSK_OK: {
+                    pid_t         client_pid = taskresult.result_rawpid;
+                    int           c2s_fd     = taskresult.result_c2s_fd;
+                    int           s2c_fd     = taskresult.result_s2c_fd;
                     ActiveClient *client;
-                    if ((client = creg_insert(client, c2s_fd, s2c_fd)) ==
+
+                    if ((client = creg_insert(client_pid, c2s_fd, s2c_fd)) ==
                         NULL) {
                         // drop straight away
-                        destroy_client_pipes(client, c2s_fd, s2c_fd);
+                        destroy_client_pipes(client_pid, c2s_fd, s2c_fd);
                         continue;
                     }
 
                     if (server_insert_pollslots(c2s_fd, client) != SUCCESS) {
                         // drop straight away
-                        creg_remove(c2s_fd);
+                        creg_remove(client);
                         continue;
                     }
+                    printf("Successful handshake with %d\n", client_pid);
+                    fflush(stdout);
                     break;
                 }
 
-                case RPC:
+                case AUTH_OK: {
+                    ActiveClient *client     = taskresult.result_client;
+                    pid_t         client_pid = client->client_pid;
+                    char         *username   = taskresult.result_username;
+
+                    // store username
+                    strncpy(client->username, username, MAX_USERNAME_LEN - 1);
+                    client->username[MAX_USERNAME_LEN - 1] = '\0';
+
+                    // send balance
+                    char buffer[64];
+                    int  n = snprintf(buffer,
+                                      sizeof(buffer),
+                                      "%ld\n",
+                                      taskresult.result_balance);
+
+                    write_block_pipe(client->s2c_fd, buffer, n);
+
+                    client->logged_in = 1;
+
+                    creg_release_client(client);
+
+                    printf(
+                        "Successful login with %d: %s\n", client_pid, username);
                     break;
+                }
+
+                case AUTH_NO: {
+                    ActiveClient *client = taskresult.result_client;
+
+                    write_block_pipe(client->s2c_fd,
+                                     MSG_REJECT_BALANCE,
+                                     strlen(MSG_REJECT_BALANCE));
+
+                    creg_release_client(client);
+                    schedule_disconnect(client);
+                    break;
+                }
+
+                case AUTH_UN: {
+                    ActiveClient *client = taskresult.result_client;
+
+                    write_block_pipe(client->s2c_fd,
+                                     MSG_REJECT_UNAUTHORISED,
+                                     strlen(MSG_REJECT_UNAUTHORISED));
+
+                    creg_release_client(client);
+                    schedule_disconnect(client);
+                    break;
+                }
 
                 default:
                     break;
                 }
-                break;
             }
         }
 
         /* Handle client RPC requests */
-        for (size_t i = 2; i < S_POLL_FD_COUNT;) {
-            short         rev    = S_POLL_SLOTS[i].revents;
-            int           fd     = S_POLL_SLOTS[i].fd;
-            ActiveClient *client = S_POLL_SLOTS[i].client;
+        debug_log("Entered client request handler");
+        for (size_t i = 2; RUNNING && i < S_POLL_FD_COUNT;) {
+            short         rev     = S_POLL_PFDS[i].revents;
+            int           read_fd = S_POLL_PFDS[i].fd;
+            ActiveClient *client  = S_POLL_CLIENT[i];
+            // int write_fd = client->s2c_fd;
+            uint8_t remove = false;
 
             // errors
             if (rev & (POLLERR | POLLNVAL)) {
-                goto client_pipe_cleanup;
+                remove = true;
             }
-
-            // exhaust pipe
-            if (rev & (POLLIN | POLLHUP)) {
-                while (true) {
+            else if (rev & (POLLIN | POLLHUP)) {
+                // handle the client
+                for (int req = 0; req < FIFO_MAX_PER_WAKE; req++) {
                     char    request[MAX_RPC_BUF_LEN];
-                    ErrType pipe_ret =
-                        read_until_delim(fd, request, MAX_RPC_BUF_LEN, '\0');
-                    if (pipe_ret == PIPE_CLOSED) {
+                    size_t  len;
+                    ErrType pipe_ret = read_until_delim(
+                        read_fd, request, MAX_RPC_BUF_LEN, '\n', &len);
+
+                    if (pipe_ret == SUCCESS) {
+                        request[len] = '\0';
+                        debug_log("Client says: %s", request);
+                        int remove_client = handle_command(client, request);
+                        if (remove_client) {
+                            remove = true;
+                            break;
+                        }
+                    }
+                    else if (pipe_ret == PIPE_EMPTY) {
+                        break;
+                    }
+                    else if (pipe_ret == PIPE_CLOSED) {
                         fprintf(stderr, errs[PIPE_CLOSED], "Client");
                         fflush(stderr);
-                        goto client_pipe_cleanup;
+                        remove = true;
+                        break;
                     }
-                    if (pipe_ret == PIPE_PARTIAL) {
-                        fprintf(stderr, errs[PIPE_PARTIAL], "Client");
-                        fflush(stderr);
-                        goto client_pipe_cleanup;
-                    }
-                    if (pipe_ret == PIPE_READ_FAIL) {
+                    else if (pipe_ret == PIPE_READ_FAIL) {
                         fprintf(stderr, errs[PIPE_READ_FAIL], "Client");
                         fflush(stderr);
-                        goto client_pipe_cleanup;
-                    }
-                    if (pipe_ret != SUCCESS) {
-                        goto client_pipe_cleanup;
-                    }
-
-                    if (strncmp(request, "Login ", 6) == 0) {
-                        char *username = &request[7];
-                        task_enqueue(AUTHORISE, username, client);
+                        remove = true;
+                        break;
                     }
                 }
             }
-            continue;
-
-        client_pipe_cleanup:
-            server_remove_pollslots(fd);
-            creg_remove(client);
+            if (!remove) {
+                ++i;
+            }
+            else {
+                server_remove_pollslots(read_fd);
+                creg_remove(client);
+            }
         }
+        process_disconnect_events();
     mainloop_end:;
     }
 
 teardown:
+    RUNNING = 0;
     /* Teardown */
     threadpool_destroy();
     server_destroy_selfpipes();
     server_destroy_pollslots();
+    destroy_all_disconnect_events();
     creg_destroy();
     task_destroy();
-    usertxt_close();
     return retval ? retval : 0;
 }

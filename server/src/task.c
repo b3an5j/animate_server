@@ -7,7 +7,7 @@
 #include "errors.h"
 #include "task.h"
 
-volatile TaskQueue TASK_Q;
+TaskQueue TASK_Q;
 
 void task_init()
 {
@@ -19,31 +19,33 @@ void task_init()
 }
 
 ErrType task_enqueue(TaskType      type, //
+                     pid_t         client_pid,
                      const char   *request,
                      ActiveClient *client)
 {
     Task *newtask = malloc(sizeof(*newtask));
     if (newtask == NULL) {
-        fprintf(stderr, errs[TQ_FAIL]);
+        fputs(errs[TQ_FAIL], stderr);
         fflush(stderr);
         retval = TQ_FAIL;
         return TQ_FAIL;
     }
 
-    newtask->type       = type;
-    newtask->next       = NULL;
-    newtask.task_client = client;
+    newtask->type = type;
+    newtask->next = NULL;
 
     switch (type) {
     case HANDSHAKE:
-    case GOODBYE:
-        set_name(newtask->task_c2s_name, C2S, client->client_pid);
-        set_name(newtask->task_s2c_name, S2C, client->client_pid);
+        newtask->task_rawpid = client_pid;
+        set_name(newtask->task_c2s_name, C2S, client_pid);
+        set_name(newtask->task_s2c_name, S2C, client_pid);
         break;
 
     case AUTHORISE:
     case RPC:
-        strcpy(newtask.task_request, request);
+        newtask->task_client = client;
+        strncpy(newtask->task_request, request, MAX_RPC_BUF_LEN - 1);
+        newtask->task_request[MAX_RPC_BUF_LEN - 1] = '\0';
         break;
 
     default:

@@ -6,8 +6,8 @@
 extern volatile sig_atomic_t RUNNING;
 
 typedef struct {
-    long      size;
-    pthread_t threads[];
+    long       size;
+    pthread_t *threads;
 } ThreadPool;
 
 extern ThreadPool THREADPOOL;

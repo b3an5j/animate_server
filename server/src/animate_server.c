@@ -210,11 +210,11 @@ int main(int argc, char **argv, char **envp)
                                       "%ld\n",
                                       taskresult.result_balance);
 
+                    creg_release_client(client);
+
                     write_block_pipe(client->s2c_fd, buffer, n);
 
                     client->logged_in = 1;
-
-                    creg_release_client(client);
 
                     printf(
                         "Successful login with %d: %s\n", client_pid, username);
@@ -224,16 +224,16 @@ int main(int argc, char **argv, char **envp)
                 case AUTH_NO: {
                     ActiveClient *client = taskresult.result_client;
 
-                    creg_remove(client);
+                    creg_release_client(client);
                     write_block_pipe(client->s2c_fd,
                                      MSG_REJECT_BALANCE,
                                      strlen(MSG_REJECT_BALANCE));
 
-                    creg_release_client(client);
-                    // struct timespec ts = {0};
-                    // ts.tv_sec          = 0;
-                    // ts.tv_nsec         = 1000;
-                    // nanosleep(&ts, NULL);
+                    struct timespec ts = {0};
+                    ts.tv_sec          = 1;
+                    ts.tv_nsec         = 0;
+                    nanosleep(&ts, NULL);
+                    creg_remove(client);
                     debug_log("removed");
                     break;
                 }
@@ -241,16 +241,16 @@ int main(int argc, char **argv, char **envp)
                 case AUTH_UN: {
                     ActiveClient *client = taskresult.result_client;
 
-                    creg_remove(client);
+                    creg_release_client(client);
                     write_block_pipe(client->s2c_fd,
                                      MSG_REJECT_UNAUTHORISED,
                                      strlen(MSG_REJECT_UNAUTHORISED));
 
-                    creg_release_client(client);
-                    // struct timespec ts = {0};
-                    // ts.tv_sec          = 0;
-                    // ts.tv_nsec         = 1000;
-                    // nanosleep(&ts, NULL);
+                    struct timespec ts = {0};
+                    ts.tv_sec          = 1;
+                    ts.tv_nsec         = 0;
+                    nanosleep(&ts, NULL);
+                    creg_remove(client);
                     debug_log("removed");
                     break;
                 }

@@ -5,7 +5,7 @@
 #include "task.h"
 #include <sys/time.h>
 
-#define USERDB "user.txt"
+#define USERDB "users.txt"
 #define MAX_UTXT_LINEBUF_LEN 64
 
 #define MSG_REJECT_BALANCE "Reject BALANCE\n"

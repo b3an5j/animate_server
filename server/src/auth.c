@@ -23,7 +23,7 @@ ResultType usertxt_get_balance(const char *username, long *balance)
 {
     FILE *usertxt = fopen(USERDB, "r");
     if (usertxt == NULL) {
-        return INT_ERR;
+        return AUTH_UN;
     }
 
     size_t username_len = strlen(username);

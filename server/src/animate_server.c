@@ -36,10 +36,12 @@ int main(int argc, char **argv, char **envp)
     sigfillset(&all);
     pthread_sigmask(SIG_BLOCK, &all, NULL);
 
-    if (get_threadpool_size(argc, argv) != SUCCESS ||
-        usertxt_check() != SUCCESS) {
+    if (get_threadpool_size(argc, argv) != SUCCESS) {
         goto teardown;
     }
+    // if (usertxt_check() != SUCCESS) {
+    //     goto teardown;
+    // }
 
     creg_init();
     task_init();

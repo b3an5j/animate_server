@@ -2,6 +2,7 @@
 #include "client_registry.h"
 #include "errors.h"
 #include <ctype.h>
+#include <dbg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -52,57 +53,4 @@ ResultType usertxt_get_balance(const char *username, long *balance)
 
     fclose(usertxt);
     return AUTH_UN;
-}
-
-static DisconnectEvent *disc_head = NULL;
-
-void schedule_disconnect(ActiveClient *client)
-{
-    DisconnectEvent *dc = malloc(sizeof(*dc));
-    dc->client          = client;
-
-    gettimeofday(&dc->when, NULL);
-    dc->when.tv_usec += 500000;
-    if (dc->when.tv_usec >= 1000000) {
-        dc->when.tv_sec += 1;
-        dc->when.tv_usec -= 1000000;
-    }
-
-    dc->next  = disc_head;
-    disc_head = dc;
-}
-
-void process_disconnect_events()
-{
-    struct timeval now;
-    gettimeofday(&now, NULL);
-
-    DisconnectEvent **pp = &disc_head;
-
-    while (*pp) {
-        DisconnectEvent *dc = *pp;
-
-        if (now.tv_sec > dc->when.tv_sec || (now.tv_sec == dc->when.tv_sec &&
-                                             now.tv_usec >= dc->when.tv_usec)) {
-            *pp = dc->next;
-            creg_remove(dc->client);
-            free(dc);
-            continue;
-        }
-        pp = &dc->next;
-    }
-}
-
-void destroy_all_disconnect_events()
-{
-    DisconnectEvent *dc = disc_head;
-
-    while (dc) {
-        DisconnectEvent *next = dc->next;
-        creg_remove(dc->client);
-        free(dc);
-        dc = next;
-    }
-
-    disc_head = NULL;
 }

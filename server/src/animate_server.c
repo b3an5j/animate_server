@@ -229,7 +229,12 @@ int main(int argc, char **argv, char **envp)
                                      strlen(MSG_REJECT_BALANCE));
 
                     creg_release_client(client);
-                    schedule_disconnect(client);
+                    // struct timespec ts = {0};
+                    // ts.tv_sec          = 0;
+                    // ts.tv_nsec         = 1000;
+                    // nanosleep(&ts, NULL);
+                    creg_remove(client);
+                    debug_log("removed");
                     break;
                 }
 
@@ -241,7 +246,12 @@ int main(int argc, char **argv, char **envp)
                                      strlen(MSG_REJECT_UNAUTHORISED));
 
                     creg_release_client(client);
-                    schedule_disconnect(client);
+                    // struct timespec ts = {0};
+                    // ts.tv_sec          = 0;
+                    // ts.tv_nsec         = 1000;
+                    // nanosleep(&ts, NULL);
+                    creg_remove(client);
+                    debug_log("removed");
                     break;
                 }
 
@@ -306,7 +316,6 @@ int main(int argc, char **argv, char **envp)
                 creg_remove(client);
             }
         }
-        process_disconnect_events();
     mainloop_end:;
     }
 
@@ -316,7 +325,6 @@ teardown:
     threadpool_destroy();
     server_destroy_selfpipes();
     server_destroy_pollslots();
-    destroy_all_disconnect_events();
     creg_destroy();
     task_destroy();
     return retval ? retval : 0;

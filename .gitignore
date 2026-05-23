@@ -1,6 +1,6 @@
 /libanimate
 
 obj/
-user.txt
+users.txt
 animate_server
 animate_client

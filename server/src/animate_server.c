@@ -224,6 +224,7 @@ int main(int argc, char **argv, char **envp)
                 case AUTH_NO: {
                     ActiveClient *client = taskresult.result_client;
 
+                    creg_remove(client);
                     write_block_pipe(client->s2c_fd,
                                      MSG_REJECT_BALANCE,
                                      strlen(MSG_REJECT_BALANCE));
@@ -233,7 +234,6 @@ int main(int argc, char **argv, char **envp)
                     // ts.tv_sec          = 0;
                     // ts.tv_nsec         = 1000;
                     // nanosleep(&ts, NULL);
-                    creg_remove(client);
                     debug_log("removed");
                     break;
                 }
@@ -241,6 +241,7 @@ int main(int argc, char **argv, char **envp)
                 case AUTH_UN: {
                     ActiveClient *client = taskresult.result_client;
 
+                    creg_remove(client);
                     write_block_pipe(client->s2c_fd,
                                      MSG_REJECT_UNAUTHORISED,
                                      strlen(MSG_REJECT_UNAUTHORISED));
@@ -250,7 +251,6 @@ int main(int argc, char **argv, char **envp)
                     // ts.tv_sec          = 0;
                     // ts.tv_nsec         = 1000;
                     // nanosleep(&ts, NULL);
-                    creg_remove(client);
                     debug_log("removed");
                     break;
                 }

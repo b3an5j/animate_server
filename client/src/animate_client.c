@@ -22,7 +22,7 @@ int pipes_opened = 0;
 int main(int argc, char **argv, char **envp)
 {
     (void)envp;
-    EN_DEBUG  = 1;
+    EN_DEBUG  = 0;
     LOGGED_IN = 0;
 
     /* Start procedure */

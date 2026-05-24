@@ -196,8 +196,7 @@ int perform_handshake()
 
     alarm(0);
     reset_alarm_handler();
-    printf("Connected to %d.\n", SERVER_PID);
-    fflush(stdout);
+    debug_log("Connected to %d.\n", SERVER_PID);
     return SUCCESS;
 
 hsk_to:

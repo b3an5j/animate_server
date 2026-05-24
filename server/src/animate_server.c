@@ -28,7 +28,7 @@ int main(int argc, char **argv, char **envp)
 {
     (void)envp;
 
-    EN_DEBUG = 1;
+    EN_DEBUG = 0;
 
     /* Start procedure */
     // block, no interruption

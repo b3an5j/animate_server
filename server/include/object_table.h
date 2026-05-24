@@ -13,6 +13,9 @@ typedef struct CanvasEntry {
     struct canvas *ptr;
     int            canvas_id;
 
+    int width;
+    int height;
+
     ActiveClient *owner;
     ActiveClient *shared[MAX_CLIENTS];
     int           shared_count;
@@ -65,7 +68,10 @@ void tables_init();
 void tables_destroy();
 
 /* Insert */
-int canvas_insert(struct canvas *ptr, ActiveClient *owner);
+int canvas_insert(struct canvas *ptr,
+                  ActiveClient  *owner,
+                  int            width,
+                  int            height);
 int sprite_insert(struct sprite *ptr, ActiveClient *owner);
 int placement_insert(struct sprite_placement *ptr,
                      ActiveClient            *owner,

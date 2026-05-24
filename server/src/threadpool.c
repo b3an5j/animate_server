@@ -23,6 +23,9 @@
 #include "threadpool.h"
 
 #define MAX_OPEN_RETRIES 10
+#define MAX_PATH_LEN 256
+#define MAX_FILENAME_LEN 128
+#define COMMAND_LEN 1024
 #define OPEN_WAIT_TIME 10000000 // 10 ms
 
 ThreadPool THREADPOOL;
@@ -233,7 +236,7 @@ static void *worker_routine(void *)
                 break;
             }
 
-            int id = canvas_insert(cv, task->task_client);
+            int id = canvas_insert(cv, task->task_client, w, h);
             if (id < 0) {
                 animate_destroy_canvas(cv);
                 taskresult.result_retval.a = -3; // grow fail
@@ -957,7 +960,141 @@ static void *worker_routine(void *)
             break;
         }
 
-        case GENERATE:
+        case GENERATE: {
+            ActiveClient *client = task->task_client;
+            const char   *args   = task->task_request;
+
+            TaskResult taskresult;
+            memset(&taskresult, 0, sizeof(taskresult));
+            taskresult.type          = RPC_DONE;
+            taskresult.result_client = client;
+
+            // default
+            taskresult.result_retval.a = INT_MIN;
+            taskresult.result_retval.b = INT_MIN;
+            taskresult.result_retval.c = INT_MIN;
+
+            /* Parse */
+            int  canvas_id, start, end, rate;
+            char filename[MAX_FILENAME_LEN];
+
+            char fmt[64];
+            snprintf(fmt,
+                     sizeof(fmt),
+                     "%%d %%%ds %%d %%d %%d",
+                     MAX_FILENAME_LEN - 1);
+
+            if (sscanf(args, fmt, &canvas_id, filename, &start, &end, &rate) !=
+                    5 ||
+                start < 0 || end < start || rate <= 0) {
+                debug_log("Malform: %s", args);
+                taskresult.result_retval.a = -2; // value error
+                write_block_pipe(RPC_W, &taskresult, sizeof(taskresult));
+                break;
+            }
+
+            /* Lookup canvas */
+            CanvasEntry *ce = canvas_lookup(canvas_id);
+            if (!ce || !ce->ptr) {
+                debug_log("Not found: %s", args);
+                taskresult.result_retval.a = -2; // not found
+                write_block_pipe(RPC_W, &taskresult, sizeof(taskresult));
+                break;
+            }
+            struct canvas *cv = ce->ptr;
+
+            /* Open <filename>.dat */
+            char dat_path[MAX_PATH_LEN];
+            snprintf(dat_path, sizeof(dat_path), "%s.dat", filename);
+
+            int dat_fd = open(dat_path, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+            if (dat_fd < 0) {
+                taskresult.result_retval.a = 0;
+                taskresult.result_retval.b = -1; // Data write failed
+                write_block_pipe(RPC_W, &taskresult, sizeof(taskresult));
+                break;
+            }
+
+            /* Frame size */
+            size_t frame_sz = animate_frame_size_bytes(cv);
+            if (frame_sz == 0 || frame_sz != (size_t)(ce->height * ce->width)) {
+                taskresult.result_retval.a = -3; // internal error
+                write_block_pipe(RPC_W, &taskresult, sizeof(taskresult));
+                close(dat_fd);
+                break;
+            }
+
+            void *frame_buf = malloc(frame_sz);
+            if (!frame_buf) {
+                taskresult.result_retval.a = -3; // internal error
+                write_block_pipe(RPC_W, &taskresult, sizeof(taskresult));
+                close(dat_fd);
+                break;
+            }
+
+            /* Generate and write frames */
+            for (int i = start; i <= end; i++) {
+                animate_generate_frame(cv, (size_t)i, (size_t)rate, frame_buf);
+
+                ssize_t n = write(dat_fd, frame_buf, frame_sz);
+                if (n != (ssize_t)frame_sz) {
+                    taskresult.result_retval.a = 0;
+                    taskresult.result_retval.b = -1; // Data write failed
+                    write_block_pipe(RPC_W, &taskresult, sizeof(taskresult));
+                    free(frame_buf);
+                    close(dat_fd);
+                    goto done_generate;
+                }
+            }
+
+            free(frame_buf);
+
+            if (close(dat_fd) < 0) {
+                taskresult.result_retval.a = 0;
+                taskresult.result_retval.b = -1; // Data write failed
+                write_block_pipe(RPC_W, &taskresult, sizeof(taskresult));
+                break;
+            }
+
+            /* ffmpeg mp4 */
+            char mp4_path[MAX_PATH_LEN];
+            snprintf(mp4_path, sizeof(mp4_path), "%s.mp4", filename);
+
+            char log_path[MAX_PATH_LEN];
+            snprintf(log_path, sizeof(log_path), "%s.log", filename);
+
+            char cmd[COMMAND_LEN];
+            snprintf(cmd,
+                     sizeof(cmd),
+                     "ffmpeg -y -f rawvideo -pixel_format rgba "
+                     "-video_size %dx%d -framerate %d "
+                     "-i %s %s > %s 2>&1",
+                     ce->width,
+                     ce->height,
+                     rate,
+                     dat_path,
+                     mp4_path,
+                     log_path);
+
+            int rc = system(cmd);
+            if (rc != 0) {
+                taskresult.result_retval.a = 0;
+                taskresult.result_retval.b = 0;
+                taskresult.result_retval.c = -1; // Movie write failed
+                write_block_pipe(RPC_W, &taskresult, sizeof(taskresult));
+                break;
+            }
+
+            // success
+            taskresult.result_retval.a = 0;
+            taskresult.result_retval.b = 0;
+            taskresult.result_retval.c = 0;
+            write_block_pipe(RPC_W, &taskresult, sizeof(taskresult));
+
+        done_generate:
+            break;
+        }
+
         case SHARE:
         case BARRIER:
 

@@ -44,7 +44,10 @@ void tables_destroy()
 }
 
 /* INSERT HELPERS */
-int canvas_insert(struct canvas *ptr, ActiveClient *owner)
+int canvas_insert(struct canvas *ptr,
+                  ActiveClient  *owner,
+                  int            width,
+                  int            height)
 {
     if (CANVAS_TABLE.count == CANVAS_TABLE.capacity) {
         CANVAS_TABLE.arr = grow_array(
@@ -59,6 +62,8 @@ int canvas_insert(struct canvas *ptr, ActiveClient *owner)
     CanvasEntry *e  = &CANVAS_TABLE.arr[id];
 
     e->ptr          = ptr;
+    e->width        = width;
+    e->height       = height;
     e->canvas_id    = id;
     e->owner        = owner;
     e->shared_count = 0;

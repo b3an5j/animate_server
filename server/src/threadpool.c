@@ -1017,7 +1017,7 @@ static void *worker_routine(void *)
 
             /* Frame size */
             size_t frame_sz = animate_frame_size_bytes(cv);
-            if (frame_sz == 0 || frame_sz != (size_t)(ce->height * ce->width)) {
+            if (frame_sz == 0) {
                 taskresult.result_retval.a = -3; // internal error
                 write_block_pipe(RPC_W, &taskresult, sizeof(taskresult));
                 close(dat_fd);

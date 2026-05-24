@@ -246,6 +246,7 @@ static void *worker_routine(void *)
             taskresult.result_retval.b = id;
             taskresult.result_retval.c = INT_MIN;
 
+            debug_log("Created canvas");
             write_block_pipe(RPC_W, &taskresult, sizeof(taskresult));
             break;
         }
@@ -299,6 +300,7 @@ static void *worker_routine(void *)
             taskresult.result_retval.b = INT_MIN;
             taskresult.result_retval.c = INT_MIN;
 
+            debug_log("Destroyed canvas");
             write_block_pipe(RPC_W, &taskresult, sizeof(taskresult));
             break;
         }
@@ -349,6 +351,7 @@ static void *worker_routine(void *)
             taskresult.result_retval.b = id;
             taskresult.result_retval.c = INT_MIN;
 
+            debug_log("Created sprite");
             write_block_pipe(RPC_W, &taskresult, sizeof(taskresult));
             break;
         }
@@ -415,6 +418,7 @@ static void *worker_routine(void *)
             taskresult.result_retval.b = id;
             taskresult.result_retval.c = INT_MIN;
 
+            debug_log("Created rectangle");
             write_block_pipe(RPC_W, &taskresult, sizeof(taskresult));
             break;
         }
@@ -480,6 +484,7 @@ static void *worker_routine(void *)
             taskresult.result_retval.b = id;
             taskresult.result_retval.c = INT_MIN;
 
+            debug_log("Created circle");
             write_block_pipe(RPC_W, &taskresult, sizeof(taskresult));
             break;
         }
@@ -533,6 +538,7 @@ static void *worker_routine(void *)
             taskresult.result_retval.b = ret;
             taskresult.result_retval.c = INT_MIN;
 
+            debug_log("Destroyed sprite");
             write_block_pipe(RPC_W, &taskresult, sizeof(taskresult));
             break;
         }
@@ -609,6 +615,7 @@ static void *worker_routine(void *)
             taskresult.result_retval.b = id;
             taskresult.result_retval.c = INT_MIN;
 
+            debug_log("Placed sprite");
             write_block_pipe(RPC_W, &taskresult, sizeof(taskresult));
             break;
         }
@@ -663,6 +670,7 @@ static void *worker_routine(void *)
             taskresult.result_retval.b = INT_MIN;
             taskresult.result_retval.c = INT_MIN;
 
+            debug_log("Placed up");
             write_block_pipe(RPC_W, &taskresult, sizeof(taskresult));
             break;
         }
@@ -717,6 +725,7 @@ static void *worker_routine(void *)
             taskresult.result_retval.b = INT_MIN;
             taskresult.result_retval.c = INT_MIN;
 
+            debug_log("Placed down");
             write_block_pipe(RPC_W, &taskresult, sizeof(taskresult));
             break;
         }
@@ -771,6 +780,7 @@ static void *worker_routine(void *)
             taskresult.result_retval.b = INT_MIN;
             taskresult.result_retval.c = INT_MIN;
 
+            debug_log("Placed top");
             write_block_pipe(RPC_W, &taskresult, sizeof(taskresult));
             break;
         }
@@ -825,6 +835,7 @@ static void *worker_routine(void *)
             taskresult.result_retval.b = INT_MIN;
             taskresult.result_retval.c = INT_MIN;
 
+            debug_log("Placed bottom");
             write_block_pipe(RPC_W, &taskresult, sizeof(taskresult));
             break;
         }
@@ -879,6 +890,7 @@ static void *worker_routine(void *)
             taskresult.result_retval.b = INT_MIN;
             taskresult.result_retval.c = INT_MIN;
 
+            debug_log("Destroyed placement");
             write_block_pipe(RPC_W, &taskresult, sizeof(taskresult));
             break;
         }
@@ -940,6 +952,7 @@ static void *worker_routine(void *)
             taskresult.result_retval.b = INT_MIN;
             taskresult.result_retval.c = INT_MIN;
 
+            debug_log("Set param");
             write_block_pipe(RPC_W, &taskresult, sizeof(taskresult));
             break;
         }

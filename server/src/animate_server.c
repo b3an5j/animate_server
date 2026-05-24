@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <poll.h>
 #include <pthread.h>
 #include <signal.h>
@@ -200,6 +201,8 @@ int main(int argc, char **argv, char **envp)
                     pid_t         client_pid = client->client_pid;
                     char         *username   = taskresult.result_username;
 
+                    creg_release_client(client);
+
                     // store username
                     strncpy(client->username, username, MAX_USERNAME_LEN - 1);
                     client->username[MAX_USERNAME_LEN - 1] = '\0';
@@ -210,8 +213,6 @@ int main(int argc, char **argv, char **envp)
                                       sizeof(buffer),
                                       "%ld\n",
                                       taskresult.result_balance);
-
-                    creg_release_client(client);
 
                     write_block_pipe(client->s2c_fd, buffer, n);
 
@@ -259,6 +260,35 @@ int main(int argc, char **argv, char **envp)
 
                     creg_remove(client);
                     debug_log("removed");
+                    break;
+                }
+
+                case RPC_DONE: {
+                    ActiveClient *client = taskresult.result_client;
+                    creg_release_client(client);
+
+                    int a = taskresult.result_retval.a;
+                    int b = taskresult.result_retval.b;
+                    int c = taskresult.result_retval.c;
+
+                    char buffer[MAX_RPC_BUF_LEN];
+                    int  n = 0;
+
+                    // 3 val
+                    if (c != INT_MIN) {
+                        n = snprintf(
+                            buffer, sizeof(buffer), "%d %d %d\n", a, b, c);
+                    }
+                    // 2 val
+                    else if (b != INT_MIN) {
+                        n = snprintf(buffer, sizeof(buffer), "%d %d\n", a, b);
+                    }
+                    // 1 val
+                    else {
+                        n = snprintf(buffer, sizeof(buffer), "%d\n", a);
+                    }
+
+                    write_block_pipe(client->s2c_fd, buffer, n);
                     break;
                 }
 

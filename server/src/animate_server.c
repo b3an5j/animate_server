@@ -226,6 +226,8 @@ int main(int argc, char **argv, char **envp)
                     ActiveClient *client = taskresult.result_client;
 
                     creg_release_client(client);
+                    server_remove_pollslots(client->c2s_fd);
+
                     write_block_pipe(client->s2c_fd,
                                      MSG_REJECT_BALANCE,
                                      strlen(MSG_REJECT_BALANCE));
@@ -234,6 +236,8 @@ int main(int argc, char **argv, char **envp)
                     ts.tv_sec          = 1;
                     ts.tv_nsec         = 0;
                     nanosleep(&ts, NULL);
+
+                    creg_remove(client);
                     debug_log("removed");
                     break;
                 }
@@ -242,6 +246,8 @@ int main(int argc, char **argv, char **envp)
                     ActiveClient *client = taskresult.result_client;
 
                     creg_release_client(client);
+                    server_remove_pollslots(client->c2s_fd);
+
                     write_block_pipe(client->s2c_fd,
                                      MSG_REJECT_UNAUTHORISED,
                                      strlen(MSG_REJECT_UNAUTHORISED));
@@ -250,6 +256,8 @@ int main(int argc, char **argv, char **envp)
                     ts.tv_sec          = 1;
                     ts.tv_nsec         = 0;
                     nanosleep(&ts, NULL);
+
+                    creg_remove(client);
                     debug_log("removed");
                     break;
                 }

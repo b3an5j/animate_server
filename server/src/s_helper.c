@@ -146,8 +146,11 @@ void server_remove_pollslots(int fd)
             continue;
         }
 
-        size_t last    = S_POLL_FD_COUNT - 1;
-        S_POLL_PFDS[i] = S_POLL_PFDS[last];
+        size_t last = S_POLL_FD_COUNT - 1;
+
+        // copy last slot
+        S_POLL_PFDS[i]   = S_POLL_PFDS[last];
+        S_POLL_CLIENT[i] = S_POLL_CLIENT[last];
 
         // clear last slot
         S_POLL_PFDS[last].fd      = -1;
@@ -155,7 +158,6 @@ void server_remove_pollslots(int fd)
         S_POLL_PFDS[last].revents = 0;
         S_POLL_CLIENT[last]       = NULL;
 
-        S_POLL_CLIENT[i] = S_POLL_CLIENT[last];
         S_POLL_FD_COUNT--;
         return;
     }

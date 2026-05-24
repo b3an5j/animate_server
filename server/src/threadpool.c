@@ -1169,8 +1169,6 @@ static void *worker_routine(void *)
 
             // success
             taskresult.result_retval.a = 0;
-            taskresult.result_retval.b = 0;
-            taskresult.result_retval.c = 0;
 
             debug_log("Canvas %ld shared with %s", cid, user);
             write_block_pipe(RPC_W, &taskresult, sizeof(taskresult));

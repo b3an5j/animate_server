@@ -42,7 +42,22 @@ ErrType task_enqueue(TaskType      type, //
         break;
 
     case AUTHORISE:
-    case RPC:
+    case CREATE_CANVAS:
+    case DESTROY_CANVAS:
+    case CREATE_SPRITE:
+    case CREATE_RECTANGLE:
+    case CREATE_CIRCLE:
+    case DESTROY_SPRITE:
+    case PLACE_SPRITE:
+    case PLACEMENT_UP:
+    case PLACEMENT_DOWN:
+    case PLACEMENT_TOP:
+    case PLACEMENT_BOTTOM:
+    case DESTROY_PLACEMENT:
+    case SET_ANIM_PARAM:
+    case GENERATE:
+    case SHARE:
+    case BARRIER:
         newtask->task_client = client;
         strncpy(newtask->task_request, request, MAX_RPC_BUF_LEN - 1);
         newtask->task_request[MAX_RPC_BUF_LEN - 1] = '\0';

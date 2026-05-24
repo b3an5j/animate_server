@@ -16,7 +16,22 @@ typedef enum {
 typedef enum {
     HANDSHAKE,
     AUTHORISE,
-    RPC
+    CREATE_CANVAS,
+    DESTROY_CANVAS,
+    CREATE_SPRITE,
+    CREATE_RECTANGLE,
+    CREATE_CIRCLE,
+    DESTROY_SPRITE,
+    PLACE_SPRITE,
+    PLACEMENT_UP,
+    PLACEMENT_DOWN,
+    PLACEMENT_TOP,
+    PLACEMENT_BOTTOM,
+    DESTROY_PLACEMENT,
+    SET_ANIM_PARAM,
+    GENERATE,
+    SHARE,
+    BARRIER
 } TaskType;
 
 void set_name(char *buf, FifoType type, pid_t pid);

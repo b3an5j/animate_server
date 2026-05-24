@@ -44,11 +44,7 @@ typedef enum {
     AUTH_OK,
     AUTH_NO,
     AUTH_UN,
-    RPC_FAIL,
-    ERR_VAL,
-    INT_ERR,
-    RPC_OK,
-    RPC_OK_RV
+    RPC_DONE
 } ResultType;
 
 typedef struct {
@@ -63,7 +59,11 @@ typedef struct {
             char username[MAX_USERNAME_LEN + 1];
             long balance;
         } auth;
-        int retval;
+        struct {
+            int a;
+            int b;
+            int c;
+        } rpc;
     } result;
 } TaskResult;
 
@@ -74,7 +74,7 @@ typedef struct {
 #define result_s2c_fd result.fds[1]
 #define result_username result.auth.username
 #define result_balance result.auth.balance
-#define result_retval result.retval
+#define result_retval result.rpc
 
 /* Task queue */
 typedef struct {

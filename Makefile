@@ -22,7 +22,8 @@ SERVER_SRC = server/src/animate_server.c \
              server/src/task.c \
              server/src/threadpool.c \
              server/src/auth.c \
-             server/src/commands.c
+             server/src/commands.c\
+             server/src/object_table.c
 
 # Map .c to .o
 MISC_OBJ   = $(patsubst %.c,$(OBJDIR)/%.o,$(MISC_SRC))

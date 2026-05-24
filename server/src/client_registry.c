@@ -6,6 +6,7 @@
 #include "client_registry.h"
 #include "errors.h"
 #include "fifo.h"
+#include "object_table.h"
 #include "s_helper.h"
 
 ClientRegistry CLIENT_REGISTRY;
@@ -84,7 +85,36 @@ void creg_release_client(ActiveClient *client)
 
 static void client_markdead(ActiveClient *client)
 {
+    pthread_mutex_lock(&cr_lock);
     client->dead = 1;
+    pthread_mutex_unlock(&cr_lock);
+
+    // destroy all canvas owned by this client
+    for (int i = 0; i < CANVAS_TABLE.count; i++) {
+        CanvasEntry *ce = &CANVAS_TABLE.arr[i];
+        if (ce->ptr && ce->owner == client) {
+            canvas_remove(i);
+            ce->owner = NULL;
+        }
+    }
+
+    // destroy all sprites owned by this client
+    for (int i = 0; i < SPRITE_TABLE.count; i++) {
+        SpriteEntry *se = &SPRITE_TABLE.arr[i];
+        if (se->ptr && se->owner == client) {
+            sprite_remove(i);
+            se->owner = NULL;
+        }
+    }
+
+    // destroy all placements owned by this client
+    for (int i = 0; i < PLACEMENT_TABLE.count; i++) {
+        PlacementEntry *pe = &PLACEMENT_TABLE.arr[i];
+        if (pe->ptr && pe->owner == client) {
+            placement_remove(i);
+            pe->owner = NULL;
+        }
+    }
 }
 
 static void creg_unlink(ActiveClient *client)

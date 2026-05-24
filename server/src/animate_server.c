@@ -9,14 +9,13 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <animate/animate.h>
-
 #include "auth.h"
 #include "client_registry.h"
 #include "commands.h"
 #include "dbg.h"
 #include "errors.h"
 #include "fifo.h"
+#include "object_table.h"
 #include "s_helper.h"
 #include "task.h"
 #include "threadpool.h"
@@ -45,6 +44,7 @@ int main(int argc, char **argv, char **envp)
 
     creg_init();
     task_init();
+    tables_init();
     if (server_setup_pipes() != SUCCESS) {
         goto teardown;
     }
@@ -126,6 +126,7 @@ int main(int argc, char **argv, char **envp)
         /* Handle RPC inter thread communication */
         if (RPC_POLLFD.revents & POLLIN) {
             TaskResult taskresult;
+            memset(&taskresult, 0, sizeof(TaskResult));
 
             debug_log("Entered inter thread handler");
             for (int i = 0; RUNNING && i < RPC_MAX_PER_WAKE; i++) {
@@ -233,7 +234,6 @@ int main(int argc, char **argv, char **envp)
                     ts.tv_sec          = 1;
                     ts.tv_nsec         = 0;
                     nanosleep(&ts, NULL);
-                    creg_remove(client);
                     debug_log("removed");
                     break;
                 }
@@ -250,7 +250,6 @@ int main(int argc, char **argv, char **envp)
                     ts.tv_sec          = 1;
                     ts.tv_nsec         = 0;
                     nanosleep(&ts, NULL);
-                    creg_remove(client);
                     debug_log("removed");
                     break;
                 }
@@ -264,15 +263,14 @@ int main(int argc, char **argv, char **envp)
         /* Handle client RPC requests */
         debug_log("Entered client request handler");
         for (size_t i = 2; RUNNING && i < S_POLL_FD_COUNT;) {
-            short         rev     = S_POLL_PFDS[i].revents;
-            int           read_fd = S_POLL_PFDS[i].fd;
-            ActiveClient *client  = S_POLL_CLIENT[i];
-            // int write_fd = client->s2c_fd;
-            uint8_t remove = false;
+            short         rev       = S_POLL_PFDS[i].revents;
+            int           read_fd   = S_POLL_PFDS[i].fd;
+            ActiveClient *client    = S_POLL_CLIENT[i];
+            uint8_t       to_remove = false;
 
             // errors
             if (rev & (POLLERR | POLLNVAL)) {
-                remove = true;
+                to_remove = true;
             }
             else if (rev & (POLLIN | POLLHUP)) {
                 // handle the client
@@ -287,7 +285,7 @@ int main(int argc, char **argv, char **envp)
                         debug_log("Client says: %s", request);
                         int remove_client = handle_command(client, request);
                         if (remove_client) {
-                            remove = true;
+                            to_remove = true;
                             break;
                         }
                     }
@@ -297,23 +295,24 @@ int main(int argc, char **argv, char **envp)
                     else if (pipe_ret == PIPE_CLOSED) {
                         fprintf(stderr, errs[PIPE_CLOSED], "Client");
                         fflush(stderr);
-                        remove = true;
+                        to_remove = true;
                         break;
                     }
                     else if (pipe_ret == PIPE_READ_FAIL) {
                         fprintf(stderr, errs[PIPE_READ_FAIL], "Client");
                         fflush(stderr);
-                        remove = true;
+                        to_remove = true;
                         break;
                     }
                 }
             }
-            if (!remove) {
+            if (!to_remove) {
                 ++i;
             }
             else {
                 server_remove_pollslots(read_fd);
                 creg_remove(client);
+                debug_log("removed");
             }
         }
     mainloop_end:;
@@ -325,6 +324,7 @@ teardown:
     threadpool_destroy();
     server_destroy_selfpipes();
     server_destroy_pollslots();
+    tables_destroy();
     creg_destroy();
     task_destroy();
     return retval ? retval : 0;

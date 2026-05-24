@@ -1095,7 +1095,88 @@ static void *worker_routine(void *)
             break;
         }
 
-        case SHARE:
+        case SHARE: {
+            TaskResult taskresult;
+            memset(&taskresult, 0, sizeof(TaskResult));
+            taskresult.type          = RPC_DONE;
+            taskresult.result_client = task->task_client;
+
+            // default
+            taskresult.result_retval.a = -1;
+            taskresult.result_retval.b = INT_MIN;
+            taskresult.result_retval.c = INT_MIN;
+
+            // extract request
+            char buf[MAX_RPC_BUF_LEN];
+            strncpy(buf, task->task_request, sizeof(buf));
+            buf[sizeof(buf) - 1] = '\0';
+
+            char *save  = buf;
+            char *cid_s = strtok_r(save, " ", &save);
+            char *user  = strtok_r(NULL, " ", &save);
+
+            if (!cid_s || !user) {
+                debug_log("Malformed: %s", buf);
+                write_block_pipe(RPC_W, &taskresult, sizeof(taskresult));
+                break;
+            }
+
+            // parse
+            long cid;
+            if (!parse_int(cid_s, &cid) || cid < 0 || cid > INT_MAX) {
+                debug_log("Inv arg: %s", buf);
+                taskresult.result_retval.a = -2; // value error
+                write_block_pipe(RPC_W, &taskresult, sizeof(taskresult));
+                break;
+            }
+
+            // lookup canvas
+            CanvasEntry *ce = canvas_lookup(cid);
+            if (!ce || !ce->ptr) {
+                debug_log("Not found: %s", buf);
+                taskresult.result_retval.a = -2; // value error
+                write_block_pipe(RPC_W, &taskresult, sizeof(taskresult));
+                break;
+            }
+
+            // find target client by username
+            ActiveClient *target = NULL;
+            pthread_mutex_lock(&cr_lock);
+            for (ActiveClient *c = cr_clients; c; c = c->next) {
+                if (c->logged_in && strcmp(c->username, user) == 0) {
+                    target = c;
+                    break;
+                }
+            }
+            pthread_mutex_unlock(&cr_lock);
+
+            if (!target) {
+                debug_log("User not found: %s", user);
+                taskresult.result_retval.a = -2; // value error
+                write_block_pipe(RPC_W, &taskresult, sizeof(taskresult));
+                break;
+            }
+
+            // add to shared list
+            if (ce->shared_count >= MAX_CLIENTS) {
+                debug_log("Shared list full");
+                taskresult.result_retval.a = -3; // internal error
+                write_block_pipe(RPC_W, &taskresult, sizeof(taskresult));
+                break;
+            }
+
+            ce->shared[ce->shared_count++] = target;
+
+            // success
+            taskresult.result_retval.a = 0;
+            taskresult.result_retval.b = 0;
+            taskresult.result_retval.c = 0;
+
+            debug_log("Canvas %ld shared with %s", cid, user);
+            write_block_pipe(RPC_W, &taskresult, sizeof(taskresult));
+            break;
+        }
+
         case BARRIER:
 
         default:

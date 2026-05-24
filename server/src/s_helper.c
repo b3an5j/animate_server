@@ -23,6 +23,10 @@ int       HANDSHAKE_PIPE[2]; // connects main loop with signal handler
 int       RPC_PIPE[2];       // connects main loop with worker threads
 PollSlots POLLSLOTS;
 
+/*
+    Integral pipe setup.
+    Self pipe for transporting rpc task result and get signals from users.
+*/
 int server_setup_pipes()
 {
     /* Open self pipes */
@@ -121,6 +125,9 @@ int server_grow_pollslots()
     return SUCCESS;
 }
 
+/*
+    Dynamic array insert poll slots
+*/
 int server_insert_pollslots(int fd, ActiveClient *client)
 {
     // Check if grow needed
@@ -189,6 +196,10 @@ static void shutdown_handler(int signum)
     RUNNING = 0;
 }
 
+/*
+    Integral signal setup for handling most of the signals received.
+    Most important signal is SIGUSR1
+*/
 int server_setup_signals()
 {
     struct sigaction sa;

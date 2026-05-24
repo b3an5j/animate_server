@@ -44,6 +44,7 @@ void sanitise_whitespace(char *str)
     str[write] = '\0';
 }
 
+// UNUSED
 ErrType write_blob(int fd, const void *buf, size_t len)
 {
     ErrType ret;

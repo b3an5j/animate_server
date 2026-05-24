@@ -37,9 +37,6 @@ typedef enum {
 void set_name(char *buf, FifoType type, pid_t pid);
 void sanitise_whitespace(char *str);
 
-ErrType write_rpc_msg(int fd, const void *buf, size_t len);
-ErrType read_rpc_msg(int fd, void *buf, size_t maxlen, size_t *out_len);
-
 ErrType write_nonblock_pipe(int fd, const void *buf, size_t n_target);
 ErrType write_block_pipe(int fd, const void *buf, size_t n_target);
 ErrType read_nonblock_pipe(int fd, void *buf, size_t n_target);

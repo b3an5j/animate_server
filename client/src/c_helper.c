@@ -15,6 +15,9 @@
 /* Handshake */
 int C_FDS[2];
 
+/*
+    Sets the server pid got from input.
+*/
 int set_serverpid(int argc, char *argv[])
 {
     if (argc == 1) {
@@ -59,6 +62,9 @@ static void shutdown_handler(int signum)
     CONNECTION_STATE = DISCONNECTED;
 }
 
+/*
+    Integral signal setup for shutdown and SIGUSR2
+*/
 int client_setup_signals()
 {
     struct sigaction sa = {0};
@@ -125,6 +131,9 @@ int client_setup_signals()
     return SUCCESS;
 }
 
+/*
+    Resets after successful handshake
+*/
 static void reset_alarm_handler()
 {
     struct sigaction sa = {0};
@@ -138,6 +147,11 @@ static void reset_alarm_handler()
     }
 }
 
+/*
+    Sends SIGUSR1 to server then waits.
+    Fail if fail to signal the process.
+    Timeout after 1 second of no reply.
+*/
 int perform_handshake()
 {
     // block, no interruption
@@ -217,6 +231,10 @@ hsk_fail:
 /* RPC request */
 static char INPUT[MAX_RPC_BUF_LEN];
 
+/*
+    Reject any input except for login.
+    React to login reply from server.
+*/
 void authorise()
 {
     char *ret;
